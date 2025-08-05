@@ -142,6 +142,7 @@ def get_client_ip() -> str:
 def get_external_ip_from_headers() -> str:
     """
     Try to extract external IP from various headers and environment variables
+    Includes support for Postman and other API testing tools
     """
     # Check for common headers that might contain real IP
     ip_headers = [
@@ -150,7 +151,12 @@ def get_external_ip_from_headers() -> str:
         'X-Client-IP',
         'CF-Connecting-IP',
         'True-Client-IP',
-        'X-Original-Forwarded-For'
+        'X-Original-Forwarded-For',
+        # Postman and API tool specific headers
+        'X-Postman-IP',
+        'X-Test-IP',
+        'X-Custom-IP',
+        'X-Simulated-IP'
     ]
     
     for header in ip_headers:
@@ -173,7 +179,9 @@ def get_external_ip_from_headers() -> str:
         'HTTP_X_REAL_IP',
         'HTTP_X_CLIENT_IP',
         'HTTP_CF_CONNECTING_IP',
-        'HTTP_TRUE_CLIENT_IP'
+        'HTTP_TRUE_CLIENT_IP',
+        'HTTP_X_POSTMAN_IP',
+        'HTTP_X_TEST_IP'
     ]
     
     for env_var in env_headers:
@@ -182,6 +190,24 @@ def get_external_ip_from_headers() -> str:
             try:
                 ip_obj = ipaddress.ip_address(ip)
                 if not ip_obj.is_loopback and not ip_obj.is_private:
+                    return ip
+            except ValueError:
+                continue
+    
+    # Check for Postman-specific patterns in headers
+    postman_headers = [
+        'X-Postman-Client-IP',
+        'X-Postman-Real-IP',
+        'X-Insomnia-Client-IP',
+        'X-Curl-Client-IP'
+    ]
+    
+    for header in postman_headers:
+        ip = request.headers.get(header)
+        if ip:
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                if not ip_obj.is_loopback:
                     return ip
             except ValueError:
                 continue
@@ -267,12 +293,19 @@ def get_request_metadata() -> Dict[str, Any]:
 
 def detect_client_type(user_agent: str) -> str:
     """
-    Detect if request is from web frontend, Android app, or other
+    Detect if request is from web frontend, Android app, API tools, or other
     """
     if not user_agent:
         return "unknown"
     
     user_agent_lower = user_agent.lower()
+    
+    # API Testing Tools detection
+    if any(pattern in user_agent_lower for pattern in [
+        'postman', 'insomnia', 'apache-httpclient', 'okhttp', 'retrofit',
+        'python-requests', 'curl', 'wget', 'httpie', 'restclient'
+    ]):
+        return "api_tool"
     
     # Android app detection
     if any(pattern in user_agent_lower for pattern in [
