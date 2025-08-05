@@ -141,6 +141,86 @@ def test_localhost_scenarios():
             print(f"  Error: {str(e)}")
         print()
 
+def test_infrastructure_tools():
+    """Test various infrastructure and API testing tools"""
+    print("🛠️ Testing Infrastructure Tools...")
+    
+    tools = [
+        {
+            "name": "Postman",
+            "headers": {
+                "X-API-Key": API_KEY,
+                "User-Agent": "PostmanRuntime/7.32.3",
+                "X-Postman-Client-IP": "203.0.113.1"
+            }
+        },
+        {
+            "name": "Insomnia",
+            "headers": {
+                "X-API-Key": API_KEY,
+                "User-Agent": "Insomnia/8.6.1",
+                "X-Insomnia-Client-IP": "203.0.113.2"
+            }
+        },
+        {
+            "name": "curl",
+            "headers": {
+                "X-API-Key": API_KEY,
+                "User-Agent": "curl/7.68.0",
+                "X-Curl-Client-IP": "203.0.113.3"
+            }
+        },
+        {
+            "name": "Python Requests",
+            "headers": {
+                "X-API-Key": API_KEY,
+                "User-Agent": "python-requests/2.28.1"
+            }
+        },
+        {
+            "name": "Kubernetes Health Check",
+            "headers": {
+                "User-Agent": "kube-probe/1.20",
+                "X-Request-ID": "k8s-health-123",
+                "X-Service-Name": "kube-probe"
+            }
+        },
+        {
+            "name": "Prometheus Monitoring",
+            "headers": {
+                "User-Agent": "Prometheus/2.30.0",
+                "X-Request-ID": "prometheus-metrics-456",
+                "X-Service-Name": "prometheus"
+            }
+        },
+        {
+            "name": "Nginx Load Balancer",
+            "headers": {
+                "User-Agent": "nginx/1.18.0",
+                "X-Forwarded-For": "10.0.0.1, 192.168.1.100",
+                "X-Real-IP": "10.0.0.1",
+                "X-Request-ID": "nginx-lb-789"
+            }
+        }
+    ]
+    
+    for tool in tools:
+        print(f"Testing: {tool['name']}")
+        try:
+            response = requests.get(f"{BASE_URL}/api/detect/simple", 
+                                  headers=tool['headers'])
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"  Detected IP: {data.get('ip', 'unknown')}")
+                print(f"  Client Type: {data.get('device_type', 'unknown')}")
+                print(f"  Browser: {data.get('browser', 'unknown')}")
+            else:
+                print(f"  Error: {response.status_code}")
+        except Exception as e:
+            print(f"  Error: {str(e)}")
+        print()
+
 def main():
     """Run all local development tests"""
     print("🚀 Starting Local Development Tests...")
@@ -150,12 +230,15 @@ def main():
     test_with_forwarded_headers()
     test_debug_endpoint()
     test_localhost_scenarios()
+    test_infrastructure_tools()
     
     print("🎉 Local development tests completed!")
     print("\n💡 Tips for local development:")
     print("  - Use X-Forwarded-For header to simulate real IPs")
     print("  - Check /api/debug/ip-info for detailed information")
     print("  - The API will prioritize non-localhost IPs when available")
+    print("  - Infrastructure tools are automatically detected")
+    print("  - Use /api/infrastructure/status for monitoring")
 
 if __name__ == "__main__":
     main()

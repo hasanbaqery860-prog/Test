@@ -116,7 +116,14 @@ def get_client_ip() -> str:
         'X-Original-Forwarded-For',
         'X-Forwarded-For-Original',
         'X-Client-Real-IP',
-        'X-Real-IP-Original'
+        'X-Real-IP-Original',
+        # Infrastructure and microservice headers
+        'X-Service-Name',
+        'X-Request-ID',
+        'X-Correlation-ID',
+        'X-Trace-ID',
+        'X-Span-ID',
+        'X-Parent-Span-ID'
     ]
     
     for header in custom_ip_headers:
@@ -212,6 +219,32 @@ def get_external_ip_from_headers() -> str:
             except ValueError:
                 continue
     
+    # Check for infrastructure and microservice headers
+    infrastructure_headers = [
+        'X-Kubernetes-Pod-IP',
+        'X-Docker-Container-IP',
+        'X-Service-IP',
+        'X-Microservice-IP',
+        'X-LoadBalancer-Client-IP',
+        'X-Proxy-Client-IP',
+        'X-Envoy-Client-IP',
+        'X-Istio-Client-IP',
+        'X-Traefik-Client-IP',
+        'X-Nginx-Client-IP',
+        'X-Apache-Client-IP',
+        'X-HAProxy-Client-IP'
+    ]
+    
+    for header in infrastructure_headers:
+        ip = request.headers.get(header)
+        if ip:
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                if not ip_obj.is_loopback:
+                    return ip
+            except ValueError:
+                continue
+    
     return None
 
 def parse_user_agent(user_agent: str) -> Dict[str, Any]:
@@ -293,17 +326,29 @@ def get_request_metadata() -> Dict[str, Any]:
 
 def detect_client_type(user_agent: str) -> str:
     """
-    Detect if request is from web frontend, Android app, API tools, or other
+    Detect if request is from web frontend, Android app, API tools, infrastructure, or other
     """
     if not user_agent:
         return "unknown"
     
     user_agent_lower = user_agent.lower()
     
+    # Infrastructure and Microservices detection
+    if any(pattern in user_agent_lower for pattern in [
+        'kubernetes', 'docker', 'nginx', 'apache', 'haproxy', 'traefik',
+        'istio', 'envoy', 'consul', 'etcd', 'prometheus', 'grafana',
+        'elasticsearch', 'logstash', 'kibana', 'jenkins', 'gitlab',
+        'aws-sdk', 'azure-sdk', 'gcp-sdk', 'terraform', 'ansible',
+        'microservice', 'service-mesh', 'load-balancer', 'proxy',
+        'monitoring', 'health-check', 'heartbeat', 'ping'
+    ]):
+        return "infrastructure"
+    
     # API Testing Tools detection
     if any(pattern in user_agent_lower for pattern in [
         'postman', 'insomnia', 'apache-httpclient', 'okhttp', 'retrofit',
-        'python-requests', 'curl', 'wget', 'httpie', 'restclient'
+        'python-requests', 'curl', 'wget', 'httpie', 'restclient',
+        'soapui', 'jmeter', 'gatling', 'artillery', 'k6'
     ]):
         return "api_tool"
     
@@ -456,6 +501,41 @@ def debug_ip_info():
     
     response.content_type = 'application/json'
     return json.dumps(debug_info, indent=2)
+
+@bottle.route('/api/infrastructure/status', method=['GET'])
+def infrastructure_status():
+    """Infrastructure monitoring endpoint (no auth required for health checks)"""
+    status_info = {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "version": "1.0.0",
+        "service": "ip-browser-detection-api",
+        "environment": config.ENVIRONMENT if hasattr(config, 'ENVIRONMENT') else 'development',
+        "performance": {
+            "total_requests": request_stats["total_requests"],
+            "cache_hit_rate": f"{(request_stats['cache_hits'] / max(request_stats['total_requests'], 1)) * 100:.2f}%",
+            "uptime_seconds": time.time() - request_stats["start_time"],
+            "cache_size": len(request_cache)
+        },
+        "client_info": {
+            "detected_ip": get_client_ip(),
+            "client_type": detect_client_type(request.headers.get('User-Agent', '')),
+            "user_agent": request.headers.get('User-Agent', ''),
+            "request_id": request.headers.get('X-Request-ID', ''),
+            "correlation_id": request.headers.get('X-Correlation-ID', ''),
+            "service_name": request.headers.get('X-Service-Name', '')
+        },
+        "headers": {
+            "x-forwarded-for": request.headers.get('X-Forwarded-For', ''),
+            "x-real-ip": request.headers.get('X-Real-IP', ''),
+            "x-client-ip": request.headers.get('X-Client-IP', ''),
+            "host": request.headers.get('Host', ''),
+            "user-agent": request.headers.get('User-Agent', '')
+        }
+    }
+    
+    response.content_type = 'application/json'
+    return json.dumps(status_info, indent=2)
 
 # Error handlers
 @bottle.error(401)

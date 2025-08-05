@@ -172,6 +172,45 @@ This will test various scenarios including:
 - Debug information display
 - Multiple IP scenarios
 
+## Infrastructure Support
+
+The API supports calls from infrastructure components, microservices, and monitoring tools:
+
+### Supported Infrastructure Tools
+- **Kubernetes**: Health checks, service mesh
+- **Docker**: Container orchestration
+- **Nginx/Apache**: Load balancers, reverse proxies
+- **Prometheus/Grafana**: Monitoring and metrics
+- **Jenkins/GitLab**: CI/CD pipelines
+- **Terraform/Ansible**: Infrastructure automation
+- **AWS/Azure/GCP**: Cloud SDKs and services
+
+### Infrastructure Endpoints
+
+```bash
+# Infrastructure status (no auth required)
+curl http://localhost:8080/api/infrastructure/status
+
+# Health check for load balancers
+curl http://localhost:8080/api/health
+```
+
+### Infrastructure Headers Support
+- `X-Request-ID`: Request correlation
+- `X-Correlation-ID`: Distributed tracing
+- `X-Service-Name`: Service identification
+- `X-Trace-ID`: OpenTelemetry tracing
+- `X-Span-ID`: Span correlation
+- `X-Parent-Span-ID`: Parent span tracking
+
+### Infrastructure Detection
+The API automatically detects infrastructure tools by user agent:
+- **Kubernetes**: `kube-probe/1.20`
+- **Prometheus**: `Prometheus/2.30.0`
+- **Nginx**: `nginx/1.18.0`
+- **Docker**: `Docker-Client/20.10.0`
+- **Jenkins**: `Jenkins/2.319.3`
+
 ## Usage Examples
 
 ### Web Frontend (JavaScript)

@@ -23,7 +23,17 @@ TEST_USER_AGENTS = {
     "firefox_mobile": "Mozilla/5.0 (Android 13; Mobile; rv:120.0) Gecko/120.0 Firefox/120.0",
     "android_app": "okhttp/4.9.3",
     "safari_ios": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1.2 Mobile/15E148 Safari/604.1",
-    "edge_desktop": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+    "edge_desktop": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+    "postman": "PostmanRuntime/7.32.3",
+    "insomnia": "Insomnia/8.6.1",
+    "curl": "curl/7.68.0",
+    "python_requests": "python-requests/2.28.1",
+    "kubernetes": "kube-probe/1.20",
+    "nginx": "nginx/1.18.0",
+    "prometheus": "Prometheus/2.30.0",
+    "docker": "Docker-Client/20.10.0",
+    "jenkins": "Jenkins/2.319.3",
+    "terraform": "Terraform/1.0.0"
 }
 
 def test_endpoint(endpoint: str, api_key: str, user_agent: str = None, description: str = "") -> Dict[str, Any]:
@@ -111,6 +121,9 @@ def test_local_development_scenarios():
     # Test debug endpoint (no auth required)
     test_endpoint("/api/debug/ip-info", "", description="Debug IP Info (No Auth)")
     
+    # Test infrastructure status endpoint
+    test_endpoint("/api/infrastructure/status", "", description="Infrastructure Status (No Auth)")
+    
     # Test with localhost IP
     headers = {
         "X-API-Key": API_KEYS["web_frontend"],
@@ -150,6 +163,73 @@ def test_local_development_scenarios():
         print()
     except Exception as e:
         print(f"❌ Custom Headers Test Error: {str(e)}")
+        print()
+
+def test_infrastructure_scenarios():
+    """Test scenarios specific to infrastructure and microservices"""
+    print("🏗️ Testing Infrastructure Scenarios...")
+    
+    # Test infrastructure status endpoint
+    infrastructure_headers = [
+        {
+            "name": "Kubernetes Health Check",
+            "headers": {
+                "User-Agent": "kube-probe/1.20",
+                "X-Request-ID": "k8s-health-123",
+                "X-Service-Name": "kube-probe"
+            }
+        },
+        {
+            "name": "Prometheus Monitoring",
+            "headers": {
+                "User-Agent": "Prometheus/2.30.0",
+                "X-Request-ID": "prometheus-metrics-456",
+                "X-Service-Name": "prometheus"
+            }
+        },
+        {
+            "name": "Nginx Load Balancer",
+            "headers": {
+                "User-Agent": "nginx/1.18.0",
+                "X-Forwarded-For": "10.0.0.1, 192.168.1.100",
+                "X-Real-IP": "10.0.0.1",
+                "X-Request-ID": "nginx-lb-789"
+            }
+        },
+        {
+            "name": "Docker Container",
+            "headers": {
+                "User-Agent": "Docker-Client/20.10.0",
+                "X-Docker-Container-IP": "172.17.0.2",
+                "X-Request-ID": "docker-container-abc"
+            }
+        },
+        {
+            "name": "Jenkins Pipeline",
+            "headers": {
+                "User-Agent": "Jenkins/2.319.3",
+                "X-Request-ID": "jenkins-pipeline-def",
+                "X-Service-Name": "jenkins"
+            }
+        }
+    ]
+    
+    for scenario in infrastructure_headers:
+        print(f"Testing: {scenario['name']}")
+        try:
+            response = requests.get(f"{BASE_URL}/api/infrastructure/status", 
+                                  headers=scenario['headers'])
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"  Status: {data.get('status', 'unknown')}")
+                print(f"  Client Type: {data.get('client_info', {}).get('client_type', 'unknown')}")
+                print(f"  Detected IP: {data.get('client_info', {}).get('detected_ip', 'unknown')}")
+                print(f"  Service Name: {data.get('client_info', {}).get('service_name', 'unknown')}")
+            else:
+                print(f"  Error: {response.status_code}")
+        except Exception as e:
+            print(f"  Error: {str(e)}")
         print()
 
 def test_cache_operations():
@@ -220,6 +300,9 @@ def main():
     
     # Test local development scenarios
     test_local_development_scenarios()
+    
+    # Test infrastructure scenarios
+    test_infrastructure_scenarios()
     
     # Test cache operations
     test_cache_operations()
