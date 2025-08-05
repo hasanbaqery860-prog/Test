@@ -104,6 +104,54 @@ def test_error_scenarios():
     # Test non-existent endpoint
     test_endpoint("/api/nonexistent", API_KEYS["web_frontend"], description="Non-existent Endpoint")
 
+def test_local_development_scenarios():
+    """Test scenarios specific to local development and testing"""
+    print("🏠 Testing Local Development Scenarios...")
+    
+    # Test debug endpoint (no auth required)
+    test_endpoint("/api/debug/ip-info", "", description="Debug IP Info (No Auth)")
+    
+    # Test with localhost IP
+    headers = {
+        "X-API-Key": API_KEYS["web_frontend"],
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    
+    try:
+        response = requests.get(f"{BASE_URL}/api/detect/simple", headers=headers)
+        print(f"✅ Local Development Test")
+        print(f"   Status: {response.status_code}")
+        if response.status_code == 200:
+            data = response.json()
+            print(f"   Detected IP: {data.get('ip', 'unknown')}")
+            print(f"   Is Localhost: {data.get('ip', '') in ['127.0.0.1', 'localhost', '::1']}")
+        print()
+    except Exception as e:
+        print(f"❌ Local Development Test Error: {str(e)}")
+        print()
+    
+    # Test with custom headers that might contain real IP
+    custom_headers = {
+        "X-API-Key": API_KEYS["web_frontend"],
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "X-Forwarded-For": "203.0.113.1, 192.168.1.100",
+        "X-Real-IP": "203.0.113.1",
+        "Host": "localhost:8080"
+    }
+    
+    try:
+        response = requests.get(f"{BASE_URL}/api/detect/simple", headers=custom_headers)
+        print(f"✅ Custom Headers Test")
+        print(f"   Status: {response.status_code}")
+        if response.status_code == 200:
+            data = response.json()
+            print(f"   Detected IP: {data.get('ip', 'unknown')}")
+            print(f"   Expected IP: 203.0.113.1")
+        print()
+    except Exception as e:
+        print(f"❌ Custom Headers Test Error: {str(e)}")
+        print()
+
 def test_cache_operations():
     """Test cache operations"""
     print("🗄️ Testing Cache Operations...")
@@ -169,6 +217,9 @@ def main():
     
     # Test error scenarios
     test_error_scenarios()
+    
+    # Test local development scenarios
+    test_local_development_scenarios()
     
     # Test cache operations
     test_cache_operations()

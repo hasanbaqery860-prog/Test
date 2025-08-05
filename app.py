@@ -57,7 +57,7 @@ def api_key_required(f):
 def get_client_ip() -> str:
     """
     High-performance IP detection with proxy support
-    Returns the most likely real client IP
+    Returns the most likely real client IP with fallbacks for local development
     """
     # Check for forwarded headers (common in proxy setups)
     forwarded_headers = [
@@ -75,15 +75,118 @@ def get_client_ip() -> str:
             if ',' in ip:
                 ip = ip.split(',')[0].strip()
             
-            # Validate IP format
+            # Validate IP format and exclude localhost
             try:
-                ipaddress.ip_address(ip)
-                return ip
+                ip_obj = ipaddress.ip_address(ip)
+                if not ip_obj.is_loopback and not ip_obj.is_private:
+                    return ip
+                elif ip_obj.is_private:
+                    # Keep private IPs but log them
+                    logger.debug(f"Using private IP: {ip}")
+                    return ip
             except ValueError:
                 continue
     
-    # Fallback to direct connection IP
-    return request.environ.get('REMOTE_ADDR', 'unknown')
+    # Check REMOTE_ADDR
+    remote_addr = request.environ.get('REMOTE_ADDR')
+    if remote_addr and remote_addr != 'unknown':
+        try:
+            ip_obj = ipaddress.ip_address(remote_addr)
+            if not ip_obj.is_loopback:
+                return remote_addr
+        except ValueError:
+            pass
+    
+    # Check for X-Forwarded-Host or Host headers for development
+    host_header = request.headers.get('X-Forwarded-Host') or request.headers.get('Host')
+    if host_header:
+        # Extract IP from host header if it contains one
+        import re
+        ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', host_header)
+        if ip_match:
+            try:
+                ip_obj = ipaddress.ip_address(ip_match.group(1))
+                if not ip_obj.is_loopback:
+                    return ip_match.group(1)
+            except ValueError:
+                pass
+    
+    # Check for custom headers that might contain real IP
+    custom_ip_headers = [
+        'X-Original-Forwarded-For',
+        'X-Forwarded-For-Original',
+        'X-Client-Real-IP',
+        'X-Real-IP-Original'
+    ]
+    
+    for header in custom_ip_headers:
+        ip = request.headers.get(header)
+        if ip:
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                if not ip_obj.is_loopback:
+                    return ip
+            except ValueError:
+                continue
+    
+    # For development/testing, try to get external IP if localhost detected
+    if remote_addr in ['127.0.0.1', 'localhost', '::1'] or not remote_addr:
+        # Try to get external IP from request headers or environment
+        external_ip = get_external_ip_from_headers()
+        if external_ip:
+            return external_ip
+    
+    # Final fallback
+    return remote_addr or 'unknown'
+
+def get_external_ip_from_headers() -> str:
+    """
+    Try to extract external IP from various headers and environment variables
+    """
+    # Check for common headers that might contain real IP
+    ip_headers = [
+        'X-Forwarded-For',
+        'X-Real-IP',
+        'X-Client-IP',
+        'CF-Connecting-IP',
+        'True-Client-IP',
+        'X-Original-Forwarded-For'
+    ]
+    
+    for header in ip_headers:
+        ip = request.headers.get(header)
+        if ip:
+            # Extract first valid IP
+            ips = ip.split(',')
+            for ip_str in ips:
+                ip_str = ip_str.strip()
+                try:
+                    ip_obj = ipaddress.ip_address(ip_str)
+                    if not ip_obj.is_loopback and not ip_obj.is_private:
+                        return ip_str
+                except ValueError:
+                    continue
+    
+    # Check environment variables
+    env_headers = [
+        'HTTP_X_FORWARDED_FOR',
+        'HTTP_X_REAL_IP',
+        'HTTP_X_CLIENT_IP',
+        'HTTP_CF_CONNECTING_IP',
+        'HTTP_TRUE_CLIENT_IP'
+    ]
+    
+    for env_var in env_headers:
+        ip = request.environ.get(env_var)
+        if ip:
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                if not ip_obj.is_loopback and not ip_obj.is_private:
+                    return ip
+            except ValueError:
+                continue
+    
+    return None
 
 def parse_user_agent(user_agent: str) -> Dict[str, Any]:
     """
@@ -293,6 +396,33 @@ def clear_cache():
         "success": True,
         "message": "Cache cleared successfully"
     })
+
+@bottle.route('/api/debug/ip-info', method=['GET'])
+def debug_ip_info():
+    """Debug endpoint to show all IP-related information (no auth required for testing)"""
+    debug_info = {
+        "remote_addr": request.environ.get('REMOTE_ADDR'),
+        "all_headers": dict(request.headers),
+        "environment_vars": {
+            "HTTP_X_FORWARDED_FOR": request.environ.get('HTTP_X_FORWARDED_FOR'),
+            "HTTP_X_REAL_IP": request.environ.get('HTTP_X_REAL_IP'),
+            "HTTP_X_CLIENT_IP": request.environ.get('HTTP_X_CLIENT_IP'),
+            "HTTP_CF_CONNECTING_IP": request.environ.get('HTTP_CF_CONNECTING_IP'),
+            "HTTP_TRUE_CLIENT_IP": request.environ.get('HTTP_TRUE_CLIENT_IP'),
+        },
+        "detected_ip": get_client_ip(),
+        "host_header": request.headers.get('Host'),
+        "x_forwarded_host": request.headers.get('X-Forwarded-Host'),
+        "user_agent": request.headers.get('User-Agent'),
+        "request_method": request.method,
+        "request_url": request.url,
+        "server_name": request.environ.get('SERVER_NAME'),
+        "server_port": request.environ.get('SERVER_PORT'),
+        "is_development": config.DEBUG
+    }
+    
+    response.content_type = 'application/json'
+    return json.dumps(debug_info, indent=2)
 
 # Error handlers
 @bottle.error(401)

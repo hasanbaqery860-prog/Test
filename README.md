@@ -136,6 +136,42 @@ The system supports different API keys for different client types:
 - **Android App:** `android_9876543210fedcba`
 - **Other Projects:** `other_abcdef1234567890`
 
+## Local Development
+
+When testing locally with Python requests or other tools, `REMOTE_ADDR` will typically be `127.0.0.1` or `localhost`. The API handles this by:
+
+1. **Prioritizing forwarded headers** over `REMOTE_ADDR`
+2. **Excluding localhost IPs** when better alternatives exist
+3. **Providing debug endpoint** for troubleshooting
+
+### Testing Local Development
+
+```bash
+# Basic test
+curl -H "X-API-Key: web_1234567890abcdef" http://localhost:8080/api/detect/simple
+
+# Test with custom IP headers
+curl -H "X-API-Key: web_1234567890abcdef" \
+     -H "X-Forwarded-For: 203.0.113.1" \
+     http://localhost:8080/api/detect/simple
+
+# Debug endpoint (no auth required)
+curl http://localhost:8080/api/debug/ip-info
+```
+
+### Python Testing Script
+
+```bash
+# Run local development tests
+python test_local.py
+```
+
+This will test various scenarios including:
+- Basic localhost requests
+- Requests with forwarded headers
+- Debug information display
+- Multiple IP scenarios
+
 ## Usage Examples
 
 ### Web Frontend (JavaScript)
