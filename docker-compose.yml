@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - ENVIRONMENT=production
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
+      - API_DEBUG=false
+      - CACHE_ENABLED=true
+      - REDIS_ENABLED=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RATE_LIMIT_ENABLED=true
+      - MAX_REQUESTS_PER_MINUTE=1000
+      - LOG_LEVEL=INFO
+      # API Keys (change these in production)
+      - API_KEY_WEB=web_1234567890abcdef
+      - API_KEY_ANDROID=android_9876543210fedcba
+      - API_KEY_OTHER=other_abcdef1234567890
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - api-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - api-network
+
+volumes:
+  redis_data:
+
+networks:
+  api-network:
+    driver: bridge
