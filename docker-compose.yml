@@ -6,53 +6,52 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: authentik
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: changeme-authentik-db
       POSTGRES_DB: authentik
-      TZ: ${TZ}
+      TZ: UTC
+    # Run Postgres on a non-default internal port
+    command: ["postgres", "-c", "port=55432"]
     volumes:
       - ak-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U authentik -d authentik -p 55432"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    # Expose Postgres on a non-default host port, localhost only
-    ports:
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-55432}:5432"
+      retries: 10
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    # Run Redis on a non-default internal port
+    command: ["redis-server", "--port", "6380", "--save", "60", "1", "--loglevel", "warning"]
     volumes:
       - ak-redis:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    # Expose Redis on a non-default host port, localhost only
-    ports:
-      - "127.0.0.1:${REDIS_HOST_PORT:-56379}:6379"
+      retries: 10
 
   authentik-server:
     image: ghcr.io/goauthentik/server:2024.6.3
     restart: unless-stopped
     command: ["server"]
     environment:
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_SECRET_KEY: "change-me-super-secret"
       AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
       AUTHENTIK_POSTGRESQL__HOST: postgres
-      AUTHENTIK_POSTGRESQL__USER: authentik
-      AUTHENTIK_POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD}
-      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PORT: "55432"
+      AUTHENTIK_POSTGRESQL__USER: "authentik"
+      AUTHENTIK_POSTGRESQL__PASSWORD: "changeme-authentik-db"
+      AUTHENTIK_POSTGRESQL__NAME: "authentik"
       AUTHENTIK_REDIS__HOST: redis
-      AUTHENTIK_REDIS__PORT: "6379"
-      TZ: ${TZ}
-    # Bind Authentik UI to non-default host ports
+      AUTHENTIK_REDIS__PORT: "6380"
+      TZ: "UTC"
+      # Optional bootstrap for first login (uncomment to use):
+      # AUTHENTIK_BOOTSTRAP_EMAIL: "admin@example.com"
+      # AUTHENTIK_BOOTSTRAP_PASSWORD: "ChangeMe123!"
     ports:
-      - "${HOST_HTTP_PORT:-8085}:9000"    # HTTP
-      - "${HOST_HTTPS_PORT:-8445}:9443"  # HTTPS
+      - "91.107.177.206:9000:9000"  # HTTP only, per request
     volumes:
       - ak-media:/media
       - ak-templates:/templates
@@ -67,15 +66,16 @@ services:
     restart: unless-stopped
     command: ["worker"]
     environment:
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_SECRET_KEY: "change-me-super-secret"
       AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
       AUTHENTIK_POSTGRESQL__HOST: postgres
-      AUTHENTIK_POSTGRESQL__USER: authentik
-      AUTHENTIK_POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD}
-      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PORT: "55432"
+      AUTHENTIK_POSTGRESQL__USER: "authentik"
+      AUTHENTIK_POSTGRESQL__PASSWORD: "changeme-authentik-db"
+      AUTHENTIK_POSTGRESQL__NAME: "authentik"
       AUTHENTIK_REDIS__HOST: redis
-      AUTHENTIK_REDIS__PORT: "6379"
-      TZ: ${TZ}
+      AUTHENTIK_REDIS__PORT: "6380"
+      TZ: "UTC"
     volumes:
       - ak-media:/media
       - ak-templates:/templates
