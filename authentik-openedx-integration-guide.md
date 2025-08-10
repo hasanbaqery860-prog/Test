@@ -152,42 +152,54 @@ AUTHENTICATION_BACKENDS = (
 
 ### Step 4: Alternative Method - Using Third Party Auth in Django Admin
 
-If you prefer to configure through the Django admin interface:
+If you prefer to configure through the Django admin interface instead of using the plugin:
 
-1. **Access Django Admin:**
-   ```bash
-   tutor local run lms ./manage.py lms create_oauth2_client \
-     "http://localhost:9000/application/o/openedx/" \
-     "http://local.openedx.io:8000/auth/complete/authentik-oauth2/" \
-     confidential \
-     --client_name "Authentik OAuth2" \
-     --client_id "openedx-oauth2-client" \
-     --client_secret "YOUR_CLIENT_SECRET_HERE" \
-     --trusted
-   ```
-
-2. **Create a superuser (if not exists):**
+1. **Create a superuser (if not exists):**
    ```bash
    tutor local run lms ./manage.py lms createsuperuser
    ```
 
-3. **Configure in Django Admin:**
+2. **Access Django Admin:**
    - Navigate to `http://local.openedx.io:8000/admin`
-   - Go to **Third Party Auth** → **Provider Configuration**
-   - Add new provider:
+   - Login with your superuser credentials
+
+3. **Enable Third Party Auth Feature:**
+   - Go to **Site Configuration** → **Site configurations**
+   - Click on the site configuration for your domain (or create one)
+   - In the `values` field, ensure you have:
+   ```json
+   {
+     "ENABLE_THIRD_PARTY_AUTH": true,
+     "ENABLE_COMBINED_LOGIN_REGISTRATION": true
+   }
+   ```
+
+4. **Configure OAuth2 Provider:**
+   - Go to **Third Party Auth** → **Provider Configuration (OAuth)**
+   - Click **Add Provider Configuration**
+   - Fill in the following:
      ```
-     Enabled: ✓
+     ✓ Enabled
+     ✓ Skip registration form
+     ✓ Skip email verification
      Name: Authentik
-     Slug: authentik-oauth2
-     Site: local.openedx.io
+     Slug: oidc
+     Site: [Select your site]
      Backend name: social_core.backends.open_id_connect.OpenIdConnectAuth
-     Key: openedx-oauth2-client
-     Secret: YOUR_CLIENT_SECRET_HERE
+     Client ID: openedx-oauth2-client
+     Client Secret: YOUR_CLIENT_SECRET_HERE
      Other settings:
      {
        "OIDC_ENDPOINT": "http://localhost:9000/application/o/openedx/"
      }
      ```
+   - Click **Save**
+
+5. **Configure Provider Site Association:**
+   - Go to **Third Party Auth** → **Provider Configuration (SAML/OAuth) to Site Associations**
+   - Click **Add**
+   - Select your provider and site
+   - Click **Save**
 
 ### Step 5: Configure Site Configuration
 
