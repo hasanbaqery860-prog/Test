@@ -110,6 +110,19 @@ CORS_ORIGIN_WHITELIST = list(CORS_ORIGIN_WHITELIST) + [
 # Set the backend name for the login button
 SOCIAL_AUTH_OIDC_CUSTOM_NAME = "Authentik"
 
+# Make provider visible on login page
+THIRD_PARTY_AUTH_PROVIDERS = [{
+    "id": "oidc",
+    "name": "Authentik",
+    "iconClass": "fa-sign-in",
+    "loginUrl": "/auth/login/oidc/?auth_entry=register",
+    "registerUrl": "/auth/login/oidc/?auth_entry=register"
+}]
+
+# Enable provider display
+THIRD_PARTY_AUTH_ENABLE_THIRD_PARTY_AUTH = True
+THIRD_PARTY_AUTH_SHOW_IN_LOGIN_PAGE = True
+
 # Optional: Debug mode (disable in production)
 # SOCIAL_AUTH_OIDC_DEBUG = True
 """
@@ -161,6 +174,10 @@ hooks.Filters.ENV_PATCHES.add_item(
         """
 # Enable third party auth in MFE
 ENABLE_THIRD_PARTY_AUTH = True
+
+# Configure OAuth2 provider settings for MFE
+OAUTH2_PROVIDER_URL = "/oauth2"
+MFE_CONFIG_AUTHN_LOGIN_REDIRECT_URL = "/dashboard"
 """
     )
 )
@@ -210,7 +227,10 @@ After installing this plugin:
      * Skip registration form: ✓
      * Skip email verification: ✓
      * Send to registration first: ✗ (unchecked)
+     * Visible to unauthenticated users: ✓
      * Enabled: ✓
+     * Icon class: fa-sign-in (optional)
+     * Secondary: ✗ (unchecked - IMPORTANT!)
 
 3. Configure Authentik:
    - Create OAuth2 Provider with:
