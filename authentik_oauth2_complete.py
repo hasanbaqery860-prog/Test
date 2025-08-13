@@ -215,6 +215,38 @@ AUTHN_MICROFRONTEND_DOMAIN = "apps.local.openedx.io/authn"
     )
 )
 
+# ===== POST-INSTALLATION HOOK =====
+# Automatically fix OAuth2 provider configuration after creation
+hooks.Filters.CLI_DO_INIT_TASKS.add_item(
+    (
+        "lms",
+        """
+# Fix OAuth2 provider to be primary (not secondary) after it's created
+python manage.py lms shell -c "
+from common.djangoapps.third_party_auth.models import OAuth2ProviderConfig
+try:
+    # Try to get the OIDC provider
+    provider = OAuth2ProviderConfig.objects.get(
+        backend_name='social_core.backends.open_id_connect.OpenIdConnectAuth'
+    )
+    # Ensure it's configured as primary provider
+    provider.secondary = False
+    provider.visible_for_unauthenticated_users = True
+    provider.enabled = True
+    provider.skip_registration_form = True
+    provider.skip_email_verification = True
+    provider.send_to_registration_first = False
+    provider.save()
+    print('✅ Authentik OAuth2 provider configured as primary')
+except OAuth2ProviderConfig.DoesNotExist:
+    print('⚠️  OAuth2 provider not found - please create it in Django Admin')
+except Exception as e:
+    print(f'⚠️  Error configuring OAuth2 provider: {e}')
+"
+"""
+    )
+)
+
 # ===== POST-INSTALLATION INSTRUCTIONS =====
 """
 After installing this plugin:
@@ -224,6 +256,7 @@ After installing this plugin:
    tutor config save
    tutor images build openedx
    tutor images build mfe
+   tutor local init  # This will run the fix hook
    tutor local restart
 
 2. Create OAuth2 provider in Django Admin:
@@ -235,22 +268,29 @@ After installing this plugin:
      * Backend name: social_core.backends.open_id_connect.OpenIdConnectAuth
      * Client ID: (your Authentik client ID)
      * Client Secret: (your Authentik client secret)
-     * Skip registration form: ✓
-     * Skip email verification: ✓
-     * Send to registration first: ✗ (unchecked)
-     * Visible to unauthenticated users: ✓
-     * Enabled: ✓
-     * Icon class: fa-sign-in (optional)
-     * Secondary: ✗ (unchecked - IMPORTANT!)
-     * Other settings (JSON): {"secondary": false}
+     * Site: Select your site
+   - Save (other settings will be auto-configured by the plugin)
 
 3. Configure Authentik:
    - Create OAuth2 Provider with:
      * Redirect URIs: http://your-domain/auth/complete/oidc/
      * Scopes: openid email profile
      
-4. Test login:
-   - For MFE: http://your-domain/authn/login
-   - For legacy: http://your-domain/login
-   - Direct OAuth: http://your-domain/auth/login/oidc/?auth_entry=register&next=/dashboard
+4. Run the fix command (if button doesn't appear):
+   tutor local exec lms python manage.py lms shell -c "
+   from common.djangoapps.third_party_auth.models import OAuth2ProviderConfig
+   p = OAuth2ProviderConfig.objects.get(backend_name='social_core.backends.open_id_connect.OpenIdConnectAuth')
+   p.secondary = False
+   p.visible_for_unauthenticated_users = True
+   p.enabled = True
+   p.save()
+   from django.core.cache import cache
+   cache.clear()
+   print('Fixed! Provider is now primary and visible.')"
+   
+   tutor local restart openedx
+
+5. Test login:
+   - Visit: http://your-domain/authn/login
+   - The "Sign in with Authentik" button should now appear
 """
