@@ -57,6 +57,8 @@ SOCIAL_AUTH_ASSOCIATE_BY_EMAIL = True
 # CORS settings for Authentik
 CORS_ORIGIN_WHITELIST = list(CORS_ORIGIN_WHITELIST) + [
     "http://localhost:9000",
+    "http://local.openedx.io:8000",
+    "https://local.openedx.io:8000",
 ]
 
 # Optional: Debug mode (disable in production)
@@ -91,6 +93,8 @@ AUTHENTICATION_BACKENDS = [
 # CORS settings for CMS
 CORS_ORIGIN_WHITELIST = list(CORS_ORIGIN_WHITELIST) + [
     "http://localhost:9000",
+    "http://local.openedx.io:8000",
+    "https://local.openedx.io:8000",
 ]
 """
     )
