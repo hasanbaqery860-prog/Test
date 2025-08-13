@@ -39,12 +39,14 @@ SOCIAL_AUTH_PIPELINE = [
     'social_core.pipeline.social_auth.social_uid',
     'social_core.pipeline.social_auth.auth_allowed',
     'social_core.pipeline.social_auth.social_user',
-    'social_core.pipeline.user.get_username',
+    'common.djangoapps.third_party_auth.pipeline.get_username',  # edX version
     'social_core.pipeline.social_auth.associate_by_email',
     'social_core.pipeline.user.create_user',
     'social_core.pipeline.social_auth.associate_user',
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
+    'common.djangoapps.third_party_auth.pipeline.set_logged_in_cookies',  # edX specific
+    'common.djangoapps.third_party_auth.pipeline.login_analytics',  # edX specific
 ]
 
 # Additional settings for better integration
@@ -52,8 +54,34 @@ SOCIAL_AUTH_OIDC_USERNAME_KEY = "preferred_username"
 SOCIAL_AUTH_OIDC_EMAIL_KEY = "email"
 SOCIAL_AUTH_OIDC_FULLNAME_KEY = "name"
 
+# Map OIDC claims to user fields
+SOCIAL_AUTH_OIDC_USERINFO_TO_EXTRA_DATA = [
+    "email",
+    "preferred_username",
+    "name",
+    "given_name",
+    "family_name"
+]
+
+# Force username from email if preferred_username is not available
+SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL = False
+SOCIAL_AUTH_OIDC_USERNAME_PREFIX = ""
+
 # Allow account linking by email
 SOCIAL_AUTH_ASSOCIATE_BY_EMAIL = True
+
+# Auto-create accounts for new users
+SOCIAL_AUTH_AUTO_CREATE_USERS = True
+
+# Skip email verification for OAuth users
+SKIP_EMAIL_VERIFICATION = True
+
+# Allow users with unverified emails to login
+ALLOW_PUBLIC_ACCOUNT_CREATION = True
+
+# Automatically activate new accounts
+SOCIAL_AUTH_PROTECTED_USER_FIELDS = ['email', 'username']
+REGISTRATION_EMAIL_PATTERNS_ALLOWED = ['.*']
 
 # CORS settings for Authentik
 CORS_ORIGIN_WHITELIST = list(CORS_ORIGIN_WHITELIST) + [
