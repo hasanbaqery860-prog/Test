@@ -173,7 +173,7 @@ hooks.Filters.CONFIG_OVERRIDES.add_item(
             "ENABLE_THIRD_PARTY_AUTH": True,
             "THIRD_PARTY_AUTH_PROVIDERS": [
                 {
-                    "id": "oidc",
+                    "id": "oa2-oidc",
                     "name": "Authentik",
                     "iconClass": "fa-sign-in",
                     "iconImage": None,
