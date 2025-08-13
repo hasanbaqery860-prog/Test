@@ -100,6 +100,13 @@ THIRD_PARTY_AUTH = {
     "ENABLE_AUTO_LINK_ACCOUNTS": True,
 }
 
+# Force provider to be primary, not secondary
+THIRD_PARTY_AUTH_ONLY_PROVIDER = "oidc"
+THIRD_PARTY_AUTH_HINT = "oidc"
+
+# Additional setting to force primary provider
+ENABLE_REQUIRE_THIRD_PARTY_AUTH = False
+
 # CORS settings for Authentik
 CORS_ORIGIN_WHITELIST = list(CORS_ORIGIN_WHITELIST) + [
     "http://localhost:9000",
@@ -188,19 +195,23 @@ hooks.Filters.CONFIG_OVERRIDES.add_item(
         "mfe",
         {
             "ENABLE_THIRD_PARTY_AUTH": True,
-            "THIRD_PARTY_AUTH_PROVIDERS": [
-                {
-                    "id": "oidc",
-                    "name": "Authentik",
-                    "iconClass": "fa-sign-in",
-                    "iconImage": None,
-                    "skipRegistrationForm": True,
-                    "skipEmailVerification": True,
-                    "loginUrl": "/auth/login/oidc/?auth_entry=register&next=/dashboard",
-                    "registerUrl": "/auth/login/oidc/?auth_entry=register&next=/dashboard"
-                }
-            ]
+            "AUTHN_MINIMAL_HEADER": False,
+            "DISABLE_ENTERPRISE_LOGIN": True,
+            "SHOW_CONFIGURABLE_EDX_FIELDS": False,
+            "THIRD_PARTY_AUTH_ONLY_HINT": "oidc"
         }
+    )
+)
+
+# Override MFE authn specific settings
+hooks.Filters.ENV_PATCHES.add_item(
+    (
+        "mfe-lms-development-settings",
+        """
+# Force third party auth display
+AUTHN_MICROFRONTEND_URL = "http://apps.local.openedx.io:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "apps.local.openedx.io/authn"
+"""
     )
 )
 
@@ -231,6 +242,7 @@ After installing this plugin:
      * Enabled: ✓
      * Icon class: fa-sign-in (optional)
      * Secondary: ✗ (unchecked - IMPORTANT!)
+     * Other settings (JSON): {"secondary": false}
 
 3. Configure Authentik:
    - Create OAuth2 Provider with:
