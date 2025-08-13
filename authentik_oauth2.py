@@ -83,6 +83,18 @@ ALLOW_PUBLIC_ACCOUNT_CREATION = True
 SOCIAL_AUTH_PROTECTED_USER_FIELDS = ['email', 'username']
 REGISTRATION_EMAIL_PATTERNS_ALLOWED = ['.*']
 
+# CRITICAL: Allow public account creation
+FEATURES["ALLOW_PUBLIC_ACCOUNT_CREATION"] = True
+
+# Don't require existing account for OAuth
+SOCIAL_AUTH_REQUIRE_EXISTING_ACCOUNT = False
+
+# Enable third party auth account linking
+THIRD_PARTY_AUTH = {
+    "ENABLE_THIRD_PARTY_AUTH": True,
+    "ENABLE_AUTO_LINK_ACCOUNTS": True,
+}
+
 # CORS settings for Authentik
 CORS_ORIGIN_WHITELIST = list(CORS_ORIGIN_WHITELIST) + [
     "http://localhost:9000",
