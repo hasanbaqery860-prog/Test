@@ -122,9 +122,18 @@ THIRD_PARTY_AUTH_PROVIDERS = [{
     "id": "oidc",
     "name": "Authentik",
     "iconClass": "fa-sign-in",
-    "loginUrl": "/auth/login/oidc/?auth_entry=register",
-    "registerUrl": "/auth/login/oidc/?auth_entry=register"
+    "loginUrl": "/auth/login/oidc/?auth_entry=login&next=/dashboard",
+    "registerUrl": "/auth/login/oidc/?auth_entry=register&next=/dashboard"
 }]
+
+# Configure OAuth to pass registration hint to Authentik
+SOCIAL_AUTH_OIDC_AUTH_EXTRA_ARGUMENTS = {
+    'prompt': 'login'  # Default to login
+}
+
+# For registration, append prompt=create to the URL
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
+SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/dashboard'
 
 # Enable provider display
 THIRD_PARTY_AUTH_ENABLE_THIRD_PARTY_AUTH = True
@@ -198,7 +207,8 @@ hooks.Filters.CONFIG_OVERRIDES.add_item(
             "AUTHN_MINIMAL_HEADER": False,
             "DISABLE_ENTERPRISE_LOGIN": True,
             "SHOW_CONFIGURABLE_EDX_FIELDS": False,
-            "THIRD_PARTY_AUTH_ONLY_HINT": "oidc"
+            "THIRD_PARTY_AUTH_ONLY_HINT": "oidc",
+            "THIRD_PARTY_AUTH_HINT": "oidc"
         }
     )
 )
@@ -275,6 +285,20 @@ After installing this plugin:
    - Create OAuth2 Provider with:
      * Redirect URIs: http://your-domain/auth/complete/oidc/
      * Scopes: openid email profile
+   
+   - To enable direct registration from Open edX:
+     * Go to Authentik Admin → Flows → Create a new flow
+     * Name: "enrollment-with-oidc"
+     * Designation: Enrollment
+     * Add stages: identification, user_write, email (optional)
+     * In your OAuth2 Provider, under "Advanced protocol settings":
+       - Set "Authorization flow" to include your enrollment flow
+     
+   - Alternative: Configure Authentik to show registration link on login:
+     * Go to Authentik Admin → Flows → default-authentication-flow
+     * Edit the identification stage
+     * Enable "Show enrollment link"
+     * Set enrollment flow
      
 4. Run the fix command (if button doesn't appear):
    tutor local exec lms python manage.py lms shell -c "
