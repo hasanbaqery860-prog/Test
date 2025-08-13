@@ -3,6 +3,7 @@ Tutor plugin for Authentik OAuth2/OIDC integration with Open edX
 Place this file in: $(tutor config printroot)/plugins/authentik_oauth2.py
 """
 from tutor import hooks
+from tutor.hooks import Filters
 
 # OAuth2 configuration for Authentik
 hooks.Filters.ENV_PATCHES.add_item(
@@ -121,5 +122,39 @@ hooks.Filters.ENV_PATCHES.add_item(
 # Set the backend name for the login button
 SOCIAL_AUTH_OIDC_CUSTOM_NAME = "Authentik"
 """
+    )
+)
+
+# ===== MFE CONFIGURATION FOR AUTHENTIK =====
+# Configure the authn MFE to show third-party auth providers
+hooks.Filters.ENV_PATCHES.add_item(
+    (
+        "mfe-lms-production-settings",
+        """
+# Enable third party auth in MFE
+ENABLE_THIRD_PARTY_AUTH = True
+"""
+    )
+)
+
+# Add MFE environment variables for authn
+hooks.Filters.CONFIG_OVERRIDES.add_item(
+    (
+        "mfe",
+        {
+            "ENABLE_THIRD_PARTY_AUTH": True,
+            "THIRD_PARTY_AUTH_PROVIDERS": [
+                {
+                    "id": "oidc",
+                    "name": "Authentik",
+                    "iconClass": "fa-sign-in",
+                    "iconImage": None,
+                    "skipRegistrationForm": True,
+                    "skipEmailVerification": True,
+                    "loginUrl": "/auth/login/oidc/?auth_entry=login&next=/dashboard",
+                    "registerUrl": "/auth/login/oidc/?auth_entry=register&next=/dashboard"
+                }
+            ]
+        }
     )
 )
