@@ -122,76 +122,48 @@ Wait until you see: `server is listening on [::]:8080` (internal port)
    - Click **Regenerate Secret** to get a Client Secret
    - Copy and save both values
 
-## Step 3: (Optional) Add SMS OTP with Kavenegar
+## Step 3: (Optional) Enable Phone Number + SMS OTP Login
 
-**Note**: For basic Open edX integration, SMS OTP is not required. You can skip this section and use standard username/password login.
+To enable login with ONLY phone number + SMS OTP:
 
-If you want to add SMS OTP authentication:
+### Configure SMS Provider
 
-### Method 1: Using Default Settings (Easier)
+1. Go to **Instance** → **SMS Providers** (or **Settings** → **SMS Provider**)
+2. Click **Add SMS Provider**
+3. Select **HTTP** for custom provider
+4. Configure for Kavenegar:
+   ```
+   Endpoint: https://api.kavenegar.com/v1/YOUR_API_KEY/sms/send.json
+   Method: POST
+   Headers:
+     Content-Type: application/x-www-form-urlencoded
+   Body Template: receptor={{.Phone}}&sender=30008077778888&message={{.Message}}
+   ```
 
-1. In Zitadel Console, go to **Settings** → **Login Policy**
-2. Enable **Passwordless with security key**
-3. Enable **OTP (Email)** or **OTP (SMS)**
-4. Configure SMS provider settings if using SMS OTP
+### Enable Passwordless Authentication
 
-### Method 2: Using Actions (Advanced)
+1. Go to **Instance** → **Login Policy**
+2. Enable **Passwordless**
+3. Set **Passwordless Type**: SMS
+4. Disable **Username Password** if you want ONLY phone login
 
-If Actions are available in your Zitadel instance:
+### Configure Your Application
 
-1. Go to **Settings** → **Actions** (if available)
-2. Click **Add Action**
-3. Select trigger: **Post Authentication**
-4. Add your action code:
+1. In your Open edX application (from Step 2)
+2. Go to application settings
+3. Enable **Passwordless authentication**
 
-```javascript
-function postAuthentication(ctx, api) {
-    // Check if this is Open edX login
-    if (ctx.request.applicationId === 'YOUR_OPENEDX_CLIENT_ID') {
-        // Require additional factor
-        api.v1.requireMFA();
-    }
-}
+### Update Docker Compose (Alternative)
+
+Add these environment variables:
+```yaml
+- ZITADEL_DEFAULTINSTANCE_PASSWORDLESSENABLED=true
+- ZITADEL_DEFAULTINSTANCE_PASSWORDLESSTYPE=sms
 ```
 
-### Method 3: Enable Built-in MFA
+Users can now login with just phone number + OTP code!
 
-The simplest approach is to use Zitadel's built-in MFA:
-
-1. Go to **Settings** → **Security Policy**
-2. Under **Multi-Factor Authentication**, enable:
-   - **OTP Email** (sends code via email)
-   - **OTP SMS** (requires SMS provider setup)
-3. Set **MFA Policy**: Required or Optional
-
-### Configure SMS Provider for Built-in SMS OTP
-
-1. Go to **Settings** → **SMS Provider**
-2. Add provider details:
-   - **Provider**: Custom
-   - **Webhook URL**: Create a simple webhook that calls Kavenegar
-   - Or use Twilio if supported
-
-### Simple Webhook for Kavenegar (if needed):
-
-```javascript
-import { http } from "zitadel";
-
-export async function sendSMSOTP(ctx, event) {
-    const phone = event.userPhoneNumber;
-    const code = event.otp;
-    const apiKey = "YOUR_KAVENEGAR_API_KEY"; // Replace this
-    const sender = "30008077778888";
-
-    await http.post({
-        url: `https://api.kavenegar.com/v1/${apiKey}/sms/send.json`,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `receptor=${phone}&sender=${sender}&message=Your OTP is ${code}`
-    });
-}
-```
-
-**Note**: SMS OTP adds complexity. For simpler integration, you can skip this step and use only username/password authentication.
+For detailed SMS provider setup, see [zitadel-sms-provider-setup.md](./zitadel-sms-provider-setup.md)
 
 ## Step 4: Configure Open edX with Tutor
 
