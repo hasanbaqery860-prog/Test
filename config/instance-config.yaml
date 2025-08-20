@@ -1,0 +1,11 @@
+FirstInstance:
+  Org:
+    Name: 'Your Organization'
+    Human:
+      UserName: 'admin@yourdomain.com'
+      FirstName: 'Admin'
+      LastName: 'User'
+      Email:
+        Address: 'admin@yourdomain.com'
+        Verified: true
+      Password: 'ChangeMeImmediately123!'
