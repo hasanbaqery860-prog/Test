@@ -124,55 +124,55 @@ Wait until you see: `server is listening on [::]:8080` (internal port)
 
 ## Step 3: (Optional) Add SMS OTP with Kavenegar
 
+**Note**: For basic Open edX integration, SMS OTP is not required. You can skip this section and use standard username/password login.
+
 If you want to add SMS OTP authentication:
 
-### Create the Action
+### Method 1: Using Default Settings (Easier)
 
-1. In Zitadel Console, go to **Actions** in the left menu
-2. Click **New Action**
-3. Give it a name: `sendSMSOTP`
-4. Select **Flow Type**: `Complement Token`
-5. Add the following code:
+1. In Zitadel Console, go to **Settings** → **Login Policy**
+2. Enable **Passwordless with security key**
+3. Enable **OTP (Email)** or **OTP (SMS)**
+4. Configure SMS provider settings if using SMS OTP
+
+### Method 2: Using Actions (Advanced)
+
+If Actions are available in your Zitadel instance:
+
+1. Go to **Settings** → **Actions** (if available)
+2. Click **Add Action**
+3. Select trigger: **Post Authentication**
+4. Add your action code:
 
 ```javascript
-function completeUserAuth(ctx, api) {
-    // Only run for your Open edX application
-    if (ctx.v1.claims.aud && ctx.v1.claims.aud.includes('YOUR_OPENEDX_CLIENT_ID')) {
-        // Check if user has phone number
-        if (ctx.v1.user.phone && ctx.v1.user.phoneVerified) {
-            // Generate OTP
-            const otp = Math.floor(100000 + Math.random() * 900000).toString();
-            
-            // Store OTP in user metadata
-            api.v1.user.setMetadata('otp_code', otp);
-            api.v1.user.setMetadata('otp_expires', new Date(Date.now() + 300000).toISOString()); // 5 min
-            
-            // Send SMS via Kavenegar
-            const phone = ctx.v1.user.phone;
-            const apiKey = "YOUR_KAVENEGAR_API_KEY"; // Replace with your API key
-            const sender = "30008077778888";
-            const message = `Your OTP is ${otp}`;
-            
-            // Note: Zitadel actions have limited HTTP capabilities
-            // For production, consider using a webhook to your own service
-            api.v1.claims.setClaim('otp_required', true);
-        }
+function postAuthentication(ctx, api) {
+    // Check if this is Open edX login
+    if (ctx.request.applicationId === 'YOUR_OPENEDX_CLIENT_ID') {
+        // Require additional factor
+        api.v1.requireMFA();
     }
 }
 ```
 
-6. Click **Save**
+### Method 3: Enable Built-in MFA
 
-### Add Action to Flow
+The simplest approach is to use Zitadel's built-in MFA:
 
-1. Go to **Flows** → **Login**
-2. Select **Complement Token** trigger
-3. Drag your `sendSMSOTP` action to the flow
-4. Click **Save**
+1. Go to **Settings** → **Security Policy**
+2. Under **Multi-Factor Authentication**, enable:
+   - **OTP Email** (sends code via email)
+   - **OTP SMS** (requires SMS provider setup)
+3. Set **MFA Policy**: Required or Optional
 
-### Alternative: Post-Authentication Action
+### Configure SMS Provider for Built-in SMS OTP
 
-For SMS OTP after login, create a simpler action:
+1. Go to **Settings** → **SMS Provider**
+2. Add provider details:
+   - **Provider**: Custom
+   - **Webhook URL**: Create a simple webhook that calls Kavenegar
+   - Or use Twilio if supported
+
+### Simple Webhook for Kavenegar (if needed):
 
 ```javascript
 import { http } from "zitadel";
@@ -326,10 +326,15 @@ docker compose up -d
 
 **Version warning**: The `version` attribute warning can be ignored, or remove the first line from docker-compose.yml
 
+**Can't Find Flows Menu**: 
+- Flows might not be available in all Zitadel versions
+- Use **Settings** → **Login Policy** or **Security Policy** instead
+- Enable built-in MFA options for simpler setup
+
 **SMS OTP Issues**: 
 - Make sure to replace `YOUR_KAVENEGAR_API_KEY` with your actual API key
 - Ensure users have verified phone numbers in Zitadel
 - Check Zitadel logs for action execution errors
-- Consider implementing OTP verification as a separate endpoint
+- Consider using built-in OTP Email if SMS setup is complex
 
 That's it! Zitadel is now integrated with Open edX.
