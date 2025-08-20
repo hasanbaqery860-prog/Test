@@ -41,6 +41,11 @@ services:
       - ZITADEL_FIRSTINSTANCE_ORG_NAME=MyOrganization
       - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME=admin@example.com
       - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD=Admin123!
+      # Optional: SMS Provider for Kavenegar (uncomment and add your API key)
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_ENABLED=true
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_PROVIDER=HTTP
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_ENDPOINT=https://api.kavenegar.com/v1/YOUR_API_KEY/sms/send.json
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_METHOD=POST
     ports:
       - '8090:8080'  # Changed to 8090 to avoid conflicts
     depends_on:
@@ -128,17 +133,25 @@ To enable login with ONLY phone number + SMS OTP:
 
 ### Configure SMS Provider
 
-1. Go to **Instance** → **SMS Providers** (or **Settings** → **SMS Provider**)
-2. Click **Add SMS Provider**
-3. Select **HTTP** for custom provider
-4. Configure for Kavenegar:
-   ```
-   Endpoint: https://api.kavenegar.com/v1/YOUR_API_KEY/sms/send.json
-   Method: POST
-   Headers:
-     Content-Type: application/x-www-form-urlencoded
-   Body Template: receptor={{.Phone}}&sender=30008077778888&message={{.Message}}
-   ```
+Check these locations in Zitadel Console:
+
+1. **Default Settings** → **Notifications** → **SMS**
+2. **Instance** → **Notification Providers**
+3. **Settings** → **Notification Settings**
+4. **Instance Settings** → **SMS Configuration**
+
+If you can't find SMS provider settings in the UI, add it via environment variables in docker-compose.yml:
+
+```yaml
+environment:
+  # SMS Provider Configuration for Kavenegar
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_ENABLED=true
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_PROVIDER=HTTP
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_ENDPOINT=https://api.kavenegar.com/v1/YOUR_API_KEY/sms/send.json
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_METHOD=POST
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_HEADERS_CONTENT-TYPE=application/x-www-form-urlencoded
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_BODY="receptor={{.Phone}}&sender=30008077778888&message={{.Text}}"
+```
 
 ### Enable Passwordless Authentication
 
@@ -297,6 +310,12 @@ docker compose up -d
 **No Login Button**: Check provider is enabled in Django Admin
 
 **Version warning**: The `version` attribute warning can be ignored, or remove the first line from docker-compose.yml
+
+**Can't Find SMS Provider Settings**: 
+- SMS provider location varies by Zitadel version
+- Check under **Notifications**, **Instance Settings**, or **Default Settings**
+- If not in UI, use environment variables in docker-compose.yml
+- Some versions might require API/config file setup
 
 **Can't Find Flows Menu**: 
 - Flows might not be available in all Zitadel versions
