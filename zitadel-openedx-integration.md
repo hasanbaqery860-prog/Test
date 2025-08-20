@@ -71,6 +71,11 @@ volumes:
 # Replace YOUR_SERVER_IP in docker-compose.yml with your actual IP
 # Example: ZITADEL_EXTERNALDOMAIN=192.168.1.100:8080
 
+# IMPORTANT: If you get password errors, clean up old data first:
+docker compose down -v
+docker volume rm zitadel-setup_postgres-data 2>/dev/null || true
+
+# Start fresh
 docker compose up -d
 
 # Check logs
@@ -202,10 +207,19 @@ http://YOUR_OPENEDX_DOMAIN/auth/login/oidc/?next=/dashboard
 
 ## Troubleshooting
 
+**PostgreSQL password authentication failed**: This happens when there's old data from a previous run. Fix it by:
+```bash
+docker compose down -v
+docker volume rm zitadel-setup_postgres-data
+docker compose up -d
+```
+
 **Connection refused**: Make sure to use the correct IP address that's accessible from your Open edX instance
 
 **OAuth Error**: Verify redirect URIs match exactly
 
 **No Login Button**: Check provider is enabled in Django Admin
+
+**Version warning**: The `version` attribute warning can be ignored, or remove the first line from docker-compose.yml
 
 That's it! Zitadel is now integrated with Open edX.
