@@ -26,7 +26,7 @@ services:
     command: ["start-from-init", "--masterkeyFromEnv", "--tlsMode", "disabled"]
     environment:
       - ZITADEL_EXTERNALPORT=8080
-      - ZITADEL_EXTERNALDOMAIN=YOUR_SERVER_IP:8080  # Replace with your server IP
+      - ZITADEL_EXTERNALDOMAIN=localhost  # Use localhost for local development
       - ZITADEL_EXTERNALSECURE=false
       - ZITADEL_MASTERKEY=GVLVFDTSIFXndQLNMd3H6yvwP3cTlnHC
       - ZITADEL_DATABASE_POSTGRES_HOST=postgres
@@ -68,8 +68,8 @@ volumes:
 ### Start Zitadel
 
 ```bash
-# Replace YOUR_SERVER_IP in docker-compose.yml with your actual IP
-# Example: ZITADEL_EXTERNALDOMAIN=192.168.1.100:8080
+# NOTE: For IP-based access, use 'localhost' in ZITADEL_EXTERNALDOMAIN
+# Then access via http://YOUR_SERVER_IP:8080
 
 # IMPORTANT: If you get password errors, clean up old data first:
 docker compose down -v
@@ -86,7 +86,7 @@ Wait until you see: `server is listening on [::]:8080`
 
 ## Step 2: Configure Zitadel
 
-1. Access Zitadel at `http://YOUR_SERVER_IP:8080`
+1. Access Zitadel at `http://YOUR_SERVER_IP:8080` (where YOUR_SERVER_IP is your actual server IP)
 2. Login: `admin@example.com` / `Admin123!`
 3. Create a new Project: **"Open edX"**
 4. Create a new Application:
@@ -206,6 +206,8 @@ http://YOUR_OPENEDX_DOMAIN/auth/login/oidc/?next=/dashboard
 ```
 
 ## Troubleshooting
+
+**Domain Invalid Character Error**: Zitadel requires a valid domain format. Use `localhost` in ZITADEL_EXTERNALDOMAIN, not an IP address. You can still access it via `http://YOUR_IP:8080`.
 
 **PostgreSQL password authentication failed**: This happens when there's old data from a previous run. Fix it by:
 ```bash
