@@ -25,7 +25,7 @@ services:
     image: ghcr.io/zitadel/zitadel:v2.42.0
     command: ["start-from-init", "--masterkeyFromEnv", "--tlsMode", "disabled"]
     environment:
-      - ZITADEL_EXTERNALPORT=8080
+      - ZITADEL_EXTERNALPORT=8090
       - ZITADEL_EXTERNALDOMAIN=localhost  # Use localhost for local development
       - ZITADEL_EXTERNALSECURE=false
       - ZITADEL_MASTERKEY=GVLVFDTSIFXndQLNMd3H6yvwP3cTlnHC
@@ -42,7 +42,7 @@ services:
       - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME=admin@example.com
       - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD=Admin123!
     ports:
-      - '8080:8080'
+      - '8090:8080'  # Changed to 8090 to avoid conflicts
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,7 +69,7 @@ volumes:
 
 ```bash
 # NOTE: For IP-based access, use 'localhost' in ZITADEL_EXTERNALDOMAIN
-# Then access via http://YOUR_SERVER_IP:8080
+# Then access via http://YOUR_SERVER_IP:8090
 
 # IMPORTANT: If you get password errors, clean up old data first:
 docker compose down -v
@@ -82,11 +82,11 @@ docker compose up -d
 docker compose logs -f zitadel
 ```
 
-Wait until you see: `server is listening on [::]:8080`
+Wait until you see: `server is listening on [::]:8080` (internal port)
 
 ## Step 2: Configure Zitadel
 
-1. Access Zitadel at `http://YOUR_SERVER_IP:8080` (where YOUR_SERVER_IP is your actual server IP)
+1. Access Zitadel at `http://YOUR_SERVER_IP:8090` (where YOUR_SERVER_IP is your actual server IP)
 2. Login: `admin@example.com` / `Admin123!`
 3. Create a new Project: **"Open edX"**
 4. Create a new Application:
@@ -109,7 +109,7 @@ Create file `$(tutor config printroot)/plugins/zitadel_oauth2.py`:
 from tutor import hooks
 
 # Update these values
-ZITADEL_DOMAIN = "http://YOUR_SERVER_IP:8080"  # Your Zitadel URL
+ZITADEL_DOMAIN = "http://YOUR_SERVER_IP:8090"  # Your Zitadel URL
 ZITADEL_CLIENT_ID = "YOUR_CLIENT_ID"          # From Zitadel
 ZITADEL_CLIENT_SECRET = "YOUR_CLIENT_SECRET"  # From Zitadel
 
@@ -207,7 +207,9 @@ http://YOUR_OPENEDX_DOMAIN/auth/login/oidc/?next=/dashboard
 
 ## Troubleshooting
 
-**Domain Invalid Character Error**: Zitadel requires a valid domain format. Use `localhost` in ZITADEL_EXTERNALDOMAIN, not an IP address. You can still access it via `http://YOUR_IP:8080`.
+**Domain Invalid Character Error**: Zitadel requires a valid domain format. Use `localhost` in ZITADEL_EXTERNALDOMAIN, not an IP address. You can still access it via `http://YOUR_IP:8090`.
+
+**Port Already in Use**: If port 8090 is also in use, change the port mapping in docker-compose.yml (e.g., `9090:8080`).
 
 **PostgreSQL password authentication failed**: This happens when there's old data from a previous run. Fix it by:
 ```bash
