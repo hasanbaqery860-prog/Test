@@ -24,7 +24,7 @@ version: '3.8'
 
 services:
   zitadel:
-    image: ghcr.io/zitadel/zitadel:latest
+    image: ghcr.io/zitadel/zitadel:v2.42.0  # Use specific version for stability
     command: 'start-from-init --masterkeyFromEnv --tlsMode disabled'
     environment:
       - ZITADEL_EXTERNALPORT=8080
@@ -162,6 +162,10 @@ http {
 # Add SSL certificates to certs/ directory
 # Then start services
 docker-compose up -d
+
+# Note: Always use Docker Compose to run Zitadel
+# Do NOT run 'zitadel serve' directly - this command doesn't exist
+# The correct command is 'start-from-init' which is already in docker-compose.yml
 ```
 
 ## Step 2: Configure Zitadel
@@ -302,6 +306,8 @@ https://your-openedx-domain.com/auth/login/oidc/?next=/dashboard
 
 ## Troubleshooting
 
+**"unknown command serve" Error**: This occurs if you're running `zitadel serve` directly. Use Docker Compose as shown above, or if running directly, use `zitadel start-from-init` instead.
+
 **OAuth Error**: Verify redirect URIs match exactly and client credentials are correct
 
 **403 Forbidden**: Ensure `SOCIAL_AUTH_REQUIRE_EXISTING_ACCOUNT = False`
@@ -309,6 +315,8 @@ https://your-openedx-domain.com/auth/login/oidc/?next=/dashboard
 **No Login Button**: Check provider is enabled in Django Admin
 
 **CORS Issues**: Verify Zitadel domain is in `CORS_ORIGIN_WHITELIST`
+
+**Container Won't Start**: Check logs with `docker-compose logs zitadel` and ensure PostgreSQL is healthy
 
 ## Security Notes
 
