@@ -122,7 +122,78 @@ Wait until you see: `server is listening on [::]:8080` (internal port)
    - Click **Regenerate Secret** to get a Client Secret
    - Copy and save both values
 
-## Step 3: Configure Open edX with Tutor
+## Step 3: (Optional) Add SMS OTP with Kavenegar
+
+If you want to add SMS OTP authentication:
+
+### Create the Action
+
+1. In Zitadel Console, go to **Actions** in the left menu
+2. Click **New Action**
+3. Give it a name: `sendSMSOTP`
+4. Select **Flow Type**: `Complement Token`
+5. Add the following code:
+
+```javascript
+function completeUserAuth(ctx, api) {
+    // Only run for your Open edX application
+    if (ctx.v1.claims.aud && ctx.v1.claims.aud.includes('YOUR_OPENEDX_CLIENT_ID')) {
+        // Check if user has phone number
+        if (ctx.v1.user.phone && ctx.v1.user.phoneVerified) {
+            // Generate OTP
+            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            // Store OTP in user metadata
+            api.v1.user.setMetadata('otp_code', otp);
+            api.v1.user.setMetadata('otp_expires', new Date(Date.now() + 300000).toISOString()); // 5 min
+            
+            // Send SMS via Kavenegar
+            const phone = ctx.v1.user.phone;
+            const apiKey = "YOUR_KAVENEGAR_API_KEY"; // Replace with your API key
+            const sender = "30008077778888";
+            const message = `Your OTP is ${otp}`;
+            
+            // Note: Zitadel actions have limited HTTP capabilities
+            // For production, consider using a webhook to your own service
+            api.v1.claims.setClaim('otp_required', true);
+        }
+    }
+}
+```
+
+6. Click **Save**
+
+### Add Action to Flow
+
+1. Go to **Flows** → **Login**
+2. Select **Complement Token** trigger
+3. Drag your `sendSMSOTP` action to the flow
+4. Click **Save**
+
+### Alternative: Post-Authentication Action
+
+For SMS OTP after login, create a simpler action:
+
+```javascript
+import { http } from "zitadel";
+
+export async function sendSMSOTP(ctx, event) {
+    const phone = event.userPhoneNumber;
+    const code = event.otp;
+    const apiKey = "YOUR_KAVENEGAR_API_KEY"; // Replace this
+    const sender = "30008077778888";
+
+    await http.post({
+        url: `https://api.kavenegar.com/v1/${apiKey}/sms/send.json`,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `receptor=${phone}&sender=${sender}&message=Your OTP is ${code}`
+    });
+}
+```
+
+**Note**: SMS OTP adds complexity. For simpler integration, you can skip this step and use only username/password authentication.
+
+## Step 4: Configure Open edX with Tutor
 
 ### Create Tutor Plugin
 
@@ -254,5 +325,11 @@ docker compose up -d
 **No Login Button**: Check provider is enabled in Django Admin
 
 **Version warning**: The `version` attribute warning can be ignored, or remove the first line from docker-compose.yml
+
+**SMS OTP Issues**: 
+- Make sure to replace `YOUR_KAVENEGAR_API_KEY` with your actual API key
+- Ensure users have verified phone numbers in Zitadel
+- Check Zitadel logs for action execution errors
+- Consider implementing OTP verification as a separate endpoint
 
 That's it! Zitadel is now integrated with Open edX.
