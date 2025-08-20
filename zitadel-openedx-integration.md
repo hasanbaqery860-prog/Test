@@ -88,16 +88,39 @@ Wait until you see: `server is listening on [::]:8080` (internal port)
 
 1. Access Zitadel at `http://YOUR_SERVER_IP:8090` (where YOUR_SERVER_IP is your actual server IP)
 2. Login: `admin@example.com` / `Admin123!`
-3. Create a new Project: **"Open edX"**
+3. Create a new Project:
+   - Click **Projects** in the left menu
+   - Click **Create New Project**
+   - Name: **Open edX** (or any name you prefer)
+   - Click **Continue**
+
 4. Create a new Application:
-   - Name: **Open edX**
-   - Type: **Web Application**
-   - Authentication Method: **OIDC**
-5. Configure OIDC settings:
-   - Grant Types: **Authorization Code, Refresh Token**
-   - Redirect URIs: `http://YOUR_OPENEDX_DOMAIN/auth/complete/oidc/`
-   - Post Logout URI: `http://YOUR_OPENEDX_DOMAIN/logout`
-6. Save and note the **Client ID** and **Client Secret**
+   - In your project, click **New Application**
+   - **Name**: `Open edX App` (must not be empty)
+   - **Type**: Select **User Agent** (Web Application)
+   - Click **Continue**
+
+5. Configure Authentication:
+   - **Authentication Method**: Select **Code** (OIDC)
+   - Click **Continue**
+
+6. Configure Redirect URIs:
+   - **Redirect URIs**: Add these URIs (replace YOUR_OPENEDX_DOMAIN):
+     - `http://YOUR_OPENEDX_DOMAIN/auth/complete/oidc/`
+     - `http://YOUR_OPENEDX_DOMAIN/oauth2/redirect`
+   - **Post Logout URIs**: 
+     - `http://YOUR_OPENEDX_DOMAIN/logout`
+   - Click **Continue**
+
+7. Review and Create:
+   - Review the settings
+   - Click **Create**
+
+8. Get Credentials:
+   - After creation, you'll see the application details
+   - Note the **Client ID**
+   - Click **Regenerate Secret** to get a Client Secret
+   - Copy and save both values
 
 ## Step 3: Configure Open edX with Tutor
 
@@ -206,6 +229,12 @@ http://YOUR_OPENEDX_DOMAIN/auth/login/oidc/?next=/dashboard
 ```
 
 ## Troubleshooting
+
+**Application Invalid Error (PROJECT-1n8df)**: This occurs when creating an application without all required fields:
+- Make sure to give the application a name (not empty)
+- Select "User Agent" as the type for web applications
+- Select "Code" for OIDC authentication
+- Add at least one redirect URI
 
 **Domain Invalid Character Error**: Zitadel requires a valid domain format. Use `localhost` in ZITADEL_EXTERNALDOMAIN, not an IP address. You can still access it via `http://YOUR_IP:8090`.
 
