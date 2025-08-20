@@ -1,20 +1,18 @@
-# Zitadel Self-Hosted with Open edX Integration Guide
+# Zitadel Self-Hosted with Open edX Integration Guide (Simple Version)
 
-This guide shows how to integrate Zitadel (self-hosted identity provider) with Open edX using the built-in OIDC support.
+This guide shows how to integrate Zitadel with Open edX using the built-in OIDC support. No SSL/nginx required for development.
 
 ## Prerequisites
 
 - Docker and Docker Compose installed
 - Open edX instance with Tutor
-- Domain with SSL certificates
 
-## Step 1: Setup Zitadel with Docker Compose
+## Step 1: Setup Zitadel
 
-### Create Directory Structure
+### Create Directory and Files
 
 ```bash
-mkdir -p zitadel-setup/{config,certs}
-cd zitadel-setup
+mkdir zitadel-setup && cd zitadel-setup
 ```
 
 ### Create docker-compose.yml
@@ -24,154 +22,67 @@ version: '3.8'
 
 services:
   zitadel:
-    image: ghcr.io/zitadel/zitadel:v2.42.0  # Use specific version for stability
-    command: 'start-from-init --masterkeyFromEnv --tlsMode disabled'
+    image: ghcr.io/zitadel/zitadel:v2.42.0
+    command: ["start-from-init", "--masterkeyFromEnv", "--tlsMode", "disabled"]
     environment:
       - ZITADEL_EXTERNALPORT=8080
-      - ZITADEL_EXTERNALDOMAIN=auth.yourdomain.com
-      - ZITADEL_EXTERNALSECURE=true
-      - ZITADEL_TLS_ENABLED=false
-      - ZITADEL_MASTERKEY=${ZITADEL_MASTERKEY}
+      - ZITADEL_EXTERNALDOMAIN=YOUR_SERVER_IP:8080  # Replace with your server IP
+      - ZITADEL_EXTERNALSECURE=false
+      - ZITADEL_MASTERKEY=GVLVFDTSIFXndQLNMd3H6yvwP3cTlnHC
       - ZITADEL_DATABASE_POSTGRES_HOST=postgres
       - ZITADEL_DATABASE_POSTGRES_PORT=5432
       - ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel
       - ZITADEL_DATABASE_POSTGRES_USER_USERNAME=zitadel
-      - ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=${POSTGRES_PASSWORD}
+      - ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=zitadel
       - ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable
       - ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=postgres
-      - ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=${POSTGRES_PASSWORD}
+      - ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=postgres
       - ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable
-      - ZITADEL_FIRSTINSTANCE_PATPATH=/app/config/instance-config.yaml
+      - ZITADEL_FIRSTINSTANCE_ORG_NAME=MyOrganization
+      - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME=admin@example.com
+      - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD=Admin123!
     ports:
       - '8080:8080'
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./config/instance-config.yaml:/app/config/instance-config.yaml:ro
-      - zitadel-certs:/app/certs
-    networks:
-      - zitadel-network
 
   postgres:
     image: postgres:15-alpine
     environment:
       - POSTGRES_DB=zitadel
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PASSWORD=postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    networks:
-      - zitadel-network
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - '80:80'
-      - '443:443'
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./certs:/etc/nginx/certs:ro
-    depends_on:
-      - zitadel
-    networks:
-      - zitadel-network
 
 volumes:
   postgres-data:
-  zitadel-certs:
-
-networks:
-  zitadel-network:
-    driver: bridge
-```
-
-### Create .env file
-
-```bash
-# Generate secure keys
-ZITADEL_MASTERKEY=$(openssl rand -base64 32)
-POSTGRES_PASSWORD=$(openssl rand -base64 32)
-```
-
-### Create config/instance-config.yaml
-
-```yaml
-FirstInstance:
-  Org:
-    Name: 'Your Organization'
-    Human:
-      UserName: 'admin@yourdomain.com'
-      FirstName: 'Admin'
-      LastName: 'User'
-      Email:
-        Address: 'admin@yourdomain.com'
-        Verified: true
-      Password: 'ChangeMeImmediately123!'
-```
-
-### Create nginx.conf
-
-```nginx
-events {
-    worker_connections 1024;
-}
-
-http {
-    upstream zitadel {
-        server zitadel:8080;
-    }
-
-    server {
-        listen 80;
-        server_name auth.yourdomain.com;
-        
-        location / {
-            return 301 https://$server_name$request_uri;
-        }
-    }
-
-    server {
-        listen 443 ssl http2;
-        server_name auth.yourdomain.com;
-
-        ssl_certificate /etc/nginx/certs/fullchain.pem;
-        ssl_certificate_key /etc/nginx/certs/privkey.pem;
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_ciphers HIGH:!aNULL:!MD5;
-
-        location / {
-            proxy_pass http://zitadel;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-    }
-}
 ```
 
 ### Start Zitadel
 
 ```bash
-# Add SSL certificates to certs/ directory
-# Then start services
-docker-compose up -d
+# Replace YOUR_SERVER_IP in docker-compose.yml with your actual IP
+# Example: ZITADEL_EXTERNALDOMAIN=192.168.1.100:8080
 
-# Note: Always use Docker Compose to run Zitadel
-# Do NOT run 'zitadel serve' directly - this command doesn't exist
-# The correct command is 'start-from-init' which is already in docker-compose.yml
+docker compose up -d
+
+# Check logs
+docker compose logs -f zitadel
 ```
+
+Wait until you see: `server is listening on [::]:8080`
 
 ## Step 2: Configure Zitadel
 
-1. Access Zitadel at `https://auth.yourdomain.com`
-2. Login with admin credentials from `instance-config.yaml`
+1. Access Zitadel at `http://YOUR_SERVER_IP:8080`
+2. Login: `admin@example.com` / `Admin123!`
 3. Create a new Project: **"Open edX"**
 4. Create a new Application:
    - Name: **Open edX**
@@ -179,8 +90,8 @@ docker-compose up -d
    - Authentication Method: **OIDC**
 5. Configure OIDC settings:
    - Grant Types: **Authorization Code, Refresh Token**
-   - Redirect URIs: `https://your-openedx-domain.com/auth/complete/oidc/`
-   - Post Logout URI: `https://your-openedx-domain.com/logout`
+   - Redirect URIs: `http://YOUR_OPENEDX_DOMAIN/auth/complete/oidc/`
+   - Post Logout URI: `http://YOUR_OPENEDX_DOMAIN/logout`
 6. Save and note the **Client ID** and **Client Secret**
 
 ## Step 3: Configure Open edX with Tutor
@@ -190,16 +101,12 @@ docker-compose up -d
 Create file `$(tutor config printroot)/plugins/zitadel_oauth2.py`:
 
 ```python
-"""
-Tutor plugin for Zitadel OAuth2/OIDC integration
-Uses Open edX's built-in OIDC backend
-"""
 from tutor import hooks
 
 # Update these values
-ZITADEL_DOMAIN = "https://auth.yourdomain.com"
-ZITADEL_CLIENT_ID = "YOUR_CLIENT_ID"
-ZITADEL_CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+ZITADEL_DOMAIN = "http://YOUR_SERVER_IP:8080"  # Your Zitadel URL
+ZITADEL_CLIENT_ID = "YOUR_CLIENT_ID"          # From Zitadel
+ZITADEL_CLIENT_SECRET = "YOUR_CLIENT_SECRET"  # From Zitadel
 
 # LMS Configuration
 hooks.Filters.ENV_PATCHES.add_item(
@@ -256,17 +163,6 @@ SOCIAL_AUTH_REQUIRE_EXISTING_ACCOUNT = False
 """
     )
 )
-
-# MFE Configuration
-hooks.Filters.CONFIG_OVERRIDES.add_item(
-    (
-        "mfe",
-        {
-            "ENABLE_THIRD_PARTY_AUTH": True,
-            "THIRD_PARTY_AUTH_ONLY_HINT": "oidc"
-        }
-    )
-)
 ```
 
 ### Enable the Plugin
@@ -274,13 +170,13 @@ hooks.Filters.CONFIG_OVERRIDES.add_item(
 ```bash
 tutor plugins enable zitadel_oauth2
 tutor config save
-tutor images build openedx mfe
+tutor images build openedx
 tutor local restart
 ```
 
 ## Step 4: Configure Provider in Django Admin
 
-1. Access Django Admin: `https://your-openedx-domain.com/admin`
+1. Access: `http://YOUR_OPENEDX_DOMAIN/admin`
 2. Navigate to **Third Party Auth** → **OAuth2 Provider Config**
 3. Add new provider:
    - **Name**: oidc
@@ -294,35 +190,22 @@ tutor local restart
 
 ## Testing
 
-1. Navigate to `https://your-openedx-domain.com/login`
-2. You should see a "Sign in with Zitadel" option
-3. Click it to authenticate via Zitadel
-4. After successful authentication, you'll be redirected to Open edX
+1. Navigate to `http://YOUR_OPENEDX_DOMAIN/login`
+2. Click "Sign in with oidc"
+3. Login with Zitadel credentials
+4. You'll be redirected back to Open edX
 
-Direct OAuth URL for testing:
+Direct OAuth URL:
 ```
-https://your-openedx-domain.com/auth/login/oidc/?next=/dashboard
+http://YOUR_OPENEDX_DOMAIN/auth/login/oidc/?next=/dashboard
 ```
 
 ## Troubleshooting
 
-**"unknown command serve" Error**: This occurs if you're running `zitadel serve` directly. Use Docker Compose as shown above, or if running directly, use `zitadel start-from-init` instead.
+**Connection refused**: Make sure to use the correct IP address that's accessible from your Open edX instance
 
-**OAuth Error**: Verify redirect URIs match exactly and client credentials are correct
-
-**403 Forbidden**: Ensure `SOCIAL_AUTH_REQUIRE_EXISTING_ACCOUNT = False`
+**OAuth Error**: Verify redirect URIs match exactly
 
 **No Login Button**: Check provider is enabled in Django Admin
 
-**CORS Issues**: Verify Zitadel domain is in `CORS_ORIGIN_WHITELIST`
-
-**Container Won't Start**: Check logs with `docker-compose logs zitadel` and ensure PostgreSQL is healthy
-
-## Security Notes
-
-- Always use HTTPS in production
-- Keep client secrets secure
-- Regularly update all components
-- Use strong admin passwords
-
-That's it! Zitadel is now integrated with Open edX using the built-in OIDC support.
+That's it! Zitadel is now integrated with Open edX.
