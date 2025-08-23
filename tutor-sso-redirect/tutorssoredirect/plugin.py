@@ -37,6 +37,9 @@ FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
 from django.conf import settings
 from django.shortcuts import redirect
 from django.utils.deprecation import MiddlewareMixin
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SSORedirectMiddleware(MiddlewareMixin):
     '''Middleware to redirect authentication requests to SSO'''
@@ -51,7 +54,6 @@ class SSORedirectMiddleware(MiddlewareMixin):
         '/user_api/v2/account/login_session/',
         '/api/user/v2/account/login_session/',
         '/auth/login/',
-        '/auth/complete/',
         '/create_account',
         '/user_api/v1/account/registration/',
         '/api/user/v1/account/registration/',
@@ -62,48 +64,71 @@ class SSORedirectMiddleware(MiddlewareMixin):
         '/authn/register/',
         '/authn/logistration',
         '/authn/logistration/',
-        # Account MFE URLs that might redirect to login
+        # Account MFE URLs
         '/account/settings',
         '/account/settings/',
+        # UI login URLs
+        '/ui/login',
+        '/ui/login/',
+        '/ui/login/login',
+        '/ui/register',
+        '/ui/signin',
+        '/ui/signup',
     ]
     
     ALLOWED_URLS = [
-        '/auth/login/oidc/',  # Allow the SSO endpoint itself
-        '/auth/complete/',     # OAuth completion URLs
         '/logout',
         '/api/user/v1/account/logout_session/',
         '/admin/',
-        '/api/',
         '/static/',
         '/media/',
         '/heartbeat',
         '/robots.txt',
         '/favicon.ico',
-        # Allow OAuth2 provider URLs
         '/oauth2/',
-        '/auth/complete/azuread-oauth2/',
-        '/auth/complete/google-oauth2/',
-        '/auth/complete/github/',
-        '/auth/complete/facebook/',
+        '/auth/complete/',
+        '/api/csrf/',
+        '/csrf/',
     ]
+    
+    def is_sso_url(self, path):
+        '''Check if this is the SSO URL itself'''
+        sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+        # Remove query parameters for comparison
+        clean_path = path.split('?')[0].rstrip('/')
+        clean_sso = sso_url.split('?')[0].rstrip('/')
+        return clean_path == clean_sso
     
     def should_redirect_url(self, path):
         '''Check if URL should be redirected to SSO'''
+        # Never redirect the SSO URL itself
+        if self.is_sso_url(path):
+            return False
+            
         # First check if it's an allowed URL
         for allowed in self.ALLOWED_URLS:
             if path.startswith(allowed.rstrip('/')):
                 return False
         
+        # Check if the SSO URL is within the path (to allow OAuth flow)
+        sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+        if sso_url.rstrip('/') in path:
+            return False
+        
         # Then check if it's an auth URL that needs redirect
         for auth_url in self.AUTH_URLS:
-            if path == auth_url.rstrip('/') or path.endswith(auth_url.rstrip('/')):
+            auth_url_clean = auth_url.rstrip('/')
+            if path == auth_url_clean or path.endswith(auth_url_clean):
+                return True
+            # Also check if path starts with auth URL (for sub-paths)
+            if path.startswith(auth_url_clean + '/'):
                 return True
         
         # Also check for any URL containing these patterns
         auth_patterns = ['login', 'signin', 'register', 'signup', 'logistration']
+        path_lower = path.lower()
         for pattern in auth_patterns:
-            if pattern in path and '/api/' not in path and '/static/' not in path:
-                # Extra check to avoid redirecting API calls or static files
+            if pattern in path_lower and not any(exclude in path for exclude in ['/api/', '/static/', '/auth/complete/']):
                 return True
                 
         return False
@@ -114,19 +139,41 @@ class SSORedirectMiddleware(MiddlewareMixin):
             
         path = request.path.rstrip('/')
         
+        # Add logging for debugging
+        logger.debug(f"SSO Redirect: Checking path {path}")
+        
+        # Check for redirect loop - if we're already at SSO URL, don't redirect
+        if self.is_sso_url(path):
+            logger.debug(f"SSO Redirect: Already at SSO URL, not redirecting")
+            return None
+        
         if self.should_redirect_url(path):
             sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+            
+            # Check if we're already being redirected from this URL (loop detection)
+            referer = request.META.get('HTTP_REFERER', '')
+            if referer and path in referer:
+                logger.warning(f"SSO Redirect: Potential redirect loop detected for {path}")
+                return None
+            
             next_url = request.GET.get('next', '')
             if next_url:
-                return redirect(f"{sso_url}?next={next_url}")
+                redirect_url = f"{sso_url}?next={next_url}"
             else:
-                return redirect(sso_url)
+                redirect_url = sso_url
+                
+            logger.info(f"SSO Redirect: Redirecting {path} to {redirect_url}")
+            return redirect(redirect_url)
         
         return None
     
     def process_response(self, request, response):
         if response.status_code in [301, 302] and hasattr(response, 'url'):
             redirect_url = response.url
+            
+            # Don't process if already redirecting to SSO
+            if self.is_sso_url(redirect_url):
+                return response
             
             # Check if this is redirecting to a login page
             if self.should_redirect_url(redirect_url.split('?')[0]):
@@ -138,6 +185,8 @@ class SSORedirectMiddleware(MiddlewareMixin):
                     response['Location'] = f"{sso_url}?next={next_param}"
                 else:
                     response['Location'] = sso_url
+                    
+                logger.info(f"SSO Redirect: Changed redirect from {redirect_url} to {response['Location']}")
         
         return response
 
@@ -182,6 +231,13 @@ AUTHN_MICROFRONTEND_DOMAIN = None
 
 # Force authentication through main LMS
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
+
+# Add logging for debugging
+LOGGING['loggers']['lms.djangoapps.sso_redirect'] = {
+    'handlers': ['console'],
+    'level': 'DEBUG',
+    'propagate': False,
+}
 """),
 ])
 

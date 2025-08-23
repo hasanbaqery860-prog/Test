@@ -79,6 +79,7 @@ The plugin works by:
 - `/login`, `/register`, `/signin`, `/signup`
 - `/authn/login`, `/authn/register`, `/authn/logistration` (MFE URLs)
 - `/auth/login`, `/create_account`
+- `/ui/login`, `/ui/register`, `/ui/signin`, `/ui/signup` (UI URLs)
 - `/user_api/v1/account/login_session/`
 - `/api/user/v1/account/login_session/`
 - `/user_api/v2/account/login_session/`
@@ -111,6 +112,12 @@ python test_redirect.py https://your-lms-domain
 # ✓ /authn/register -> /auth/login/oidc/
 ```
 
+For diagnosing redirect issues:
+
+```bash
+python diagnose_redirect.py http://your-lms-domain/login
+```
+
 ## Customization
 
 ### Changing the SSO Redirect URL
@@ -128,6 +135,35 @@ tutor local restart
 To add or remove URLs from the redirect list, you'll need to modify the `AUTH_URLS` list in the plugin.py file in the middleware definition.
 
 ## Troubleshooting
+
+### Infinite Redirect Loop
+
+If you're experiencing an infinite redirect loop (e.g., with `/ui/login/login`):
+
+1. **Check the SSO URL**: Make sure your `SSO_REDIRECT_URL` is not redirecting back to a login page:
+   ```bash
+   tutor config printvalue SSO_REDIRECT_URL
+   ```
+
+2. **Use the diagnostic script**:
+   ```bash
+   python diagnose_redirect.py http://your-domain/ui/login/login
+   ```
+
+3. **Check logs for loop detection**:
+   ```bash
+   tutor local logs -f lms | grep "SSO Redirect"
+   ```
+
+4. **Verify your SSO provider configuration**:
+   - Ensure the callback URL is correctly set
+   - Check that the SSO provider is not redirecting back to Open edX login
+
+5. **Temporary workaround** - If certain URLs are problematic, you can disable the redirect temporarily:
+   ```bash
+   tutor config save --set SSO_REDIRECT_ENABLED=false
+   tutor local restart
+   ```
 
 ### Authn MFE Still Accessible
 
@@ -184,6 +220,9 @@ tutor local logs -f lms
 
 # Look for middleware initialization
 tutor local logs lms | grep SSORedirectMiddleware
+
+# Check for redirect debugging
+tutor local logs lms | grep "SSO Redirect:"
 ```
 
 ## Development

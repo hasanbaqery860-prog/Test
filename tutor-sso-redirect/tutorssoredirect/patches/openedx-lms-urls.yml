@@ -23,4 +23,8 @@ content: |
       re_path(r'^authn/.*$', sso_redirect_view, name='authn_redirect'),
       re_path(r'^auth/login/?$', sso_redirect_view, name='auth_login'),
       re_path(r'^create_account/?$', sso_redirect_view, name='create_account'),
+      re_path(r'^ui/login.*$', sso_redirect_view, name='ui_login'),
+      re_path(r'^ui/register.*$', sso_redirect_view, name='ui_register'),
+      re_path(r'^ui/signin.*$', sso_redirect_view, name='ui_signin'),
+      re_path(r'^ui/signup.*$', sso_redirect_view, name='ui_signup'),
   ] + urlpatterns
