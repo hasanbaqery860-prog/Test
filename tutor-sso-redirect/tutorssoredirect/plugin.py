@@ -33,8 +33,89 @@ FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = True
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
 
-# Middleware to handle auth redirects
-MIDDLEWARE += ['tutorssoredirect.middleware.SSORedirectMiddleware']
+# Define the SSO redirect middleware inline
+from django.conf import settings
+from django.shortcuts import redirect
+from django.utils.deprecation import MiddlewareMixin
+
+class SSORedirectMiddleware(MiddlewareMixin):
+    '''Middleware to redirect authentication requests to SSO'''
+    
+    AUTH_URLS = [
+        '/login',
+        '/register',
+        '/signin',
+        '/signup',
+        '/user_api/v1/account/login_session/',
+        '/api/user/v1/account/login_session/',
+        '/user_api/v2/account/login_session/',
+        '/api/user/v2/account/login_session/',
+    ]
+    
+    ALLOWED_URLS = [
+        '/auth/',
+        '/logout',
+        '/api/user/v1/account/logout_session/',
+        '/admin/',
+        '/api/',
+        '/static/',
+        '/media/',
+        '/heartbeat',
+        '/robots.txt',
+        '/favicon.ico',
+    ]
+    
+    def process_request(self, request):
+        if not getattr(settings, 'SSO_REDIRECT_ENABLED', True):
+            return None
+            
+        path = request.path.rstrip('/')
+        
+        for allowed in self.ALLOWED_URLS:
+            if path.startswith(allowed.rstrip('/')):
+                return None
+        
+        for auth_url in self.AUTH_URLS:
+            if path == auth_url.rstrip('/') or path.endswith(auth_url.rstrip('/')):
+                sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+                next_url = request.GET.get('next', '')
+                if next_url:
+                    return redirect(f"{sso_url}?next={next_url}")
+                else:
+                    return redirect(sso_url)
+        
+        return None
+    
+    def process_response(self, request, response):
+        if response.status_code in [301, 302] and hasattr(response, 'url'):
+            redirect_url = response.url
+            
+            for auth_url in self.AUTH_URLS:
+                if auth_url in redirect_url:
+                    sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+                    
+                    if 'next=' in redirect_url:
+                        next_param = redirect_url.split('next=')[1].split('&')[0]
+                        response['Location'] = f"{sso_url}?next={next_param}"
+                    else:
+                        response['Location'] = sso_url
+                    break
+        
+        return response
+
+# Add middleware to the middleware stack
+MIDDLEWARE += ['lms.djangoapps.sso_redirect.SSORedirectMiddleware']
+
+# Create a module to hold the middleware
+import sys
+from types import ModuleType
+
+# Create the module
+sso_redirect_module = ModuleType('lms.djangoapps.sso_redirect')
+sso_redirect_module.SSORedirectMiddleware = SSORedirectMiddleware
+
+# Add to sys.modules
+sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
 # Redirect settings
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
@@ -52,6 +133,10 @@ FEATURES['SKIP_EMAIL_VERIFICATION'] = True
 
 # Registration redirect
 REGISTRATION_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
+
+# Additional settings
+SSO_REDIRECT_ENABLED = {{ SSO_REDIRECT_ENABLED }}
+SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 """),
 ])
 
@@ -80,20 +165,3 @@ patches_dir = pkg_resources.resource_filename(
 for patch_file in glob(os.path.join(patches_dir, "*.yml")):
     with open(patch_file) as f:
         hooks.Filters.ENV_PATCHES.add_item((os.path.basename(patch_file)[:-4], f.read()))
-
-########################################
-# PLUGIN INITIALIZATION
-########################################
-
-@hooks.Filters.COMPOSE_MOUNTS.add()
-def _mount_sso_redirect_middleware(mounts, path_basename):
-    """
-    Mount the middleware directory to the containers
-    """
-    if path_basename == "openedx":
-        middleware_path = pkg_resources.resource_filename(
-            "tutorssoredirect", "openedx"
-        )
-        if os.path.exists(middleware_path):
-            mounts.append((middleware_path, "/openedx/tutorssoredirect"))
-    return mounts

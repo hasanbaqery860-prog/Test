@@ -43,16 +43,10 @@ tutor plugins enable sso-redirect
 tutor config save
 ```
 
-4. Rebuild the Open edX images to include the middleware:
+4. Restart your platform (no image rebuild needed):
 
 ```bash
-tutor images build openedx
-```
-
-5. Restart your platform:
-
-```bash
-tutor local launch
+tutor local restart
 ```
 
 ## Configuration
@@ -74,7 +68,7 @@ If your SSO is configured at a different URL, update `SSO_REDIRECT_URL` accordin
 The plugin works by:
 
 1. **Disabling native authentication**: Sets Django settings to disable registration and login features
-2. **Middleware interception**: Installs a middleware that intercepts all requests to login/register URLs
+2. **Middleware interception**: Injects a middleware directly into the settings that intercepts all requests to login/register URLs
 3. **URL overrides**: Overrides the default URL patterns to redirect to SSO
 4. **Feature flags**: Disables various authentication-related features in Open edX
 
@@ -114,18 +108,6 @@ python test_redirect.py https://your-lms-domain
 
 ## Customization
 
-### Modifying Redirect URLs
-
-To add or remove URLs from the redirect list, edit the `AUTH_URLS` list in `/tutorssoredirect/openedx/tutorssoredirect/middleware.py`:
-
-```python
-AUTH_URLS = [
-    '/login',
-    '/register',
-    # Add your custom URLs here
-]
-```
-
 ### Changing the SSO Redirect URL
 
 If your SSO endpoint is different from `/auth/login/oidc/`, update it using:
@@ -136,13 +118,18 @@ tutor config save
 tutor local restart
 ```
 
+### Modifying Redirect URLs
+
+To add or remove URLs from the redirect list, you'll need to modify the `AUTH_URLS` list in the plugin.py file in the middleware definition.
+
 ## Troubleshooting
 
 ### Users Still See Login Page
 
 1. Ensure the plugin is enabled: `tutor plugins list`
-2. Check that images were rebuilt: `tutor images build openedx`
-3. Verify middleware is loaded: Check LMS logs for middleware initialization
+2. Verify configuration was saved: `tutor config save`
+3. Restart services: `tutor local restart`
+4. Clear browser cache
 
 ### Redirect Loops
 
@@ -162,6 +149,16 @@ curl -I https://your-lms-domain/login
 # Location: /auth/login/oidc/
 ```
 
+### Checking Logs
+
+```bash
+# Check LMS logs for any errors
+tutor local logs -f lms
+
+# Look for middleware initialization
+tutor local logs lms | grep SSORedirectMiddleware
+```
+
 ## Development
 
 To contribute to this plugin:
@@ -169,7 +166,7 @@ To contribute to this plugin:
 1. Clone the repository
 2. Install in development mode: `pip install -e .`
 3. Make your changes
-4. Test with: `tutor local launch`
+4. Test with: `tutor local restart`
 
 ## License
 
