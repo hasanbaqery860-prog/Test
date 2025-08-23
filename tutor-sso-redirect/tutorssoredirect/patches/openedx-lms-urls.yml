@@ -1,30 +1,50 @@
 name: openedx-lms-urls
 content: |
   # Import required modules
-  from django.urls import re_path
+  from django.urls import re_path, path
   from django.shortcuts import redirect
   from django.conf import settings
+  from django.http import HttpResponsePermanentRedirect
   
   # Create a view that redirects to SSO
   def sso_redirect_view(request):
-      """Redirect all auth requests to SSO"""
+      """Redirect all auth requests DIRECTLY to SSO, NOT to MFE"""
       sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+      
+      # Make it absolute
+      if sso_url.startswith('/'):
+          protocol = 'https' if request.is_secure() else 'http'
+          host = request.get_host()
+          sso_url = f"{protocol}://{host}{sso_url}"
+      
       next_url = request.GET.get('next', '')
       if next_url:
-          return redirect(f"{sso_url}?next={next_url}")
-      return redirect(sso_url)
+          return HttpResponsePermanentRedirect(f"{sso_url}?next={next_url}")
+      return HttpResponsePermanentRedirect(sso_url)
   
-  # Override authentication URLs - add these patterns first to take precedence
-  urlpatterns = [
+  # Override ALL authentication URLs - prepend to urlpatterns
+  auth_redirects = [
+      # Legacy login/register URLs
       re_path(r'^login/?$', sso_redirect_view, name='signin_user'),
       re_path(r'^register/?$', sso_redirect_view, name='register_user'),
       re_path(r'^signin/?$', sso_redirect_view, name='login'),
       re_path(r'^signup/?$', sso_redirect_view, name='register'),
+      
+      # API endpoints
+      re_path(r'^user_api/v1/account/login_session/?$', sso_redirect_view, name='login_session'),
+      re_path(r'^api/user/v1/account/login_session/?$', sso_redirect_view, name='login_session_api'),
+      
+      # Authn MFE URLs - redirect these too!
       re_path(r'^authn/.*$', sso_redirect_view, name='authn_redirect'),
+      
+      # Other auth URLs
       re_path(r'^auth/login/?$', sso_redirect_view, name='auth_login'),
       re_path(r'^create_account/?$', sso_redirect_view, name='create_account'),
       re_path(r'^ui/login.*$', sso_redirect_view, name='ui_login'),
-      re_path(r'^ui/register.*$', sso_redirect_view, name='ui_register'),
-      re_path(r'^ui/signin.*$', sso_redirect_view, name='ui_signin'),
-      re_path(r'^ui/signup.*$', sso_redirect_view, name='ui_signup'),
-  ] + urlpatterns
+      
+      # Catch-all for any login-like URL
+      re_path(r'^.*(login|signin|register|signup).*$', sso_redirect_view, name='catch_all_auth'),
+  ]
+  
+  # Prepend our redirects to catch them first
+  urlpatterns = auth_redirects + urlpatterns

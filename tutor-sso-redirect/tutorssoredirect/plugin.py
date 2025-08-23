@@ -27,11 +27,20 @@ hooks.Filters.CONFIG_DEFAULTS.add_items([
 # Add patches to openedx-lms-common-settings
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
-# SSO Redirect Plugin Settings
-# Disable standard login/registration
+# SSO Redirect Plugin Settings - FUCK THE MFE, WE'RE GOING DIRECT TO SSO
+
+# COMPLETELY DISABLE THE FUCKING AUTHN MFE
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+
+# Disable all the login/register bullshit
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = True
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
+FEATURES['SHOW_REGISTRATION_LINKS'] = False
+FEATURES['ENABLE_MKTG_SITE'] = False
 
 # Define the SSO redirect middleware inline
 from django.conf import settings
@@ -51,23 +60,48 @@ class SSORedirectMiddleware(MiddlewareMixin):
             
         path = request.path.lower().rstrip('/')
         
-        # Very aggressive pattern matching for any login-related URL
-        auth_keywords = ['login', 'signin', 'register', 'signup', 'logistration', 'authn']
+        # List of auth-related URLs to intercept
+        auth_patterns = [
+            '/login',
+            '/signin', 
+            '/register',
+            '/signup',
+            '/logistration',
+            '/authn',
+            '/user_api/v1/account/login_session',
+            '/api/user/v1/account/login_session',
+            '/create_account',
+            '/ui/login',
+        ]
         
-        # Check if path contains any auth keyword
-        if any(keyword in path for keyword in auth_keywords):
-            # Skip if it's an API, static, or allowed URL
-            skip_patterns = ['/api/', '/static/', '/media/', '/admin/', '/oauth2/', '/auth/complete/', '/logout']
+        # Check if this is an auth URL
+        is_auth_url = False
+        for pattern in auth_patterns:
+            if pattern in path or path.endswith(pattern):
+                is_auth_url = True
+                break
+        
+        if is_auth_url:
+            # Skip if it's an API endpoint we need to keep
+            skip_patterns = ['/api/csrf/', '/static/', '/media/', '/admin/', '/oauth2/', '/auth/complete/', '/logout']
             if any(skip in path for skip in skip_patterns):
                 return None
             
-            # Check if this is already the SSO URL
+            # Get the full SSO URL
             sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
-            if sso_url.rstrip('/') in path:
+            
+            # Make it absolute if it's relative
+            if sso_url.startswith('/'):
+                protocol = 'https' if request.is_secure() else 'http'
+                host = request.get_host()
+                sso_url = f"{protocol}://{host}{sso_url}"
+            
+            # Check if this is already the SSO URL
+            if request.build_absolute_uri().startswith(sso_url):
                 return None
             
             # Log the redirect
-            logger.info(f"SSO Redirect: Intercepting {request.path} -> {sso_url}")
+            logger.info(f"SSO Redirect: INTERCEPTING {request.path} -> {sso_url}")
             
             # Preserve next parameter
             next_url = request.GET.get('next', '')
@@ -76,7 +110,7 @@ class SSORedirectMiddleware(MiddlewareMixin):
             else:
                 redirect_url = sso_url
             
-            # Use permanent redirect to ensure browsers cache it
+            # Use permanent redirect
             return HttpResponsePermanentRedirect(redirect_url)
         
         return None
@@ -92,10 +126,10 @@ sso_redirect_module.SSORedirectMiddleware = SSORedirectMiddleware
 # Add to sys.modules
 sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
-# Insert middleware at the BEGINNING of the stack to catch requests early
+# Insert middleware at the BEGINNING of the stack
 MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 
-# Redirect settings
+# Force all login URLs to our SSO
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
@@ -116,34 +150,22 @@ REGISTRATION_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 SSO_REDIRECT_ENABLED = {{ SSO_REDIRECT_ENABLED }}
 SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 
-# Disable the authn MFE or redirect it
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-
-# Force authentication through main LMS
+# Disable enterprise login
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
 
-# Add logging for debugging
+# IMPORTANT: Override the authn MFE URL pattern to prevent legacy from redirecting to MFE
+AUTHN_MICROFRONTEND_URL = ''
+AUTHN_MICROFRONTEND_DOMAIN = ''
+
+# Override account MFE settings too
+ACCOUNT_MICROFRONTEND_URL = None
+
+# Logging
 LOGGING['loggers']['lms.djangoapps.sso_redirect'] = {
     'handlers': ['console'],
     'level': 'INFO',
     'propagate': False,
 }
-
-# Override any login-related view classes
-try:
-    from django.contrib.auth import views as auth_views
-    from django.shortcuts import redirect as django_redirect
-    
-    # Monkey-patch login view
-    original_login = auth_views.LoginView.as_view
-    auth_views.LoginView.as_view = lambda **kwargs: lambda request: django_redirect('{{ SSO_REDIRECT_URL }}')
-except Exception:
-    pass
-
-# Disable all login forms
-FEATURES['SHOW_REGISTRATION_LINKS'] = False
-FEATURES['ENABLE_MKTG_SITE'] = False
 """),
 ])
 
@@ -162,27 +184,28 @@ MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 """),
 ])
 
-########################################
-# ADDITIONAL SETTINGS PATCHES
-########################################
-
-# Add a patch that runs after all other patches to ensure our middleware is first
+# Production settings to ensure MFE is disabled
 hooks.Filters.ENV_PATCHES.add_items([
-    ("openedx-lms-final-settings", """
-# Ensure SSO redirect middleware is absolutely first
-if 'lms.djangoapps.sso_redirect.SSORedirectMiddleware' in MIDDLEWARE:
-    MIDDLEWARE.remove('lms.djangoapps.sso_redirect.SSORedirectMiddleware')
-MIDDLEWARE.insert(0, 'lms.djangoapps.sso_redirect.SSORedirectMiddleware')
+    ("openedx-lms-production-settings", """
+# ABSOLUTELY NO MFE FOR AUTH
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
+"""),
+])
 
-# Log final middleware order for debugging
-import logging
-logger = logging.getLogger(__name__)
-logger.info(f"Final MIDDLEWARE order: {MIDDLEWARE[:5]}...")  # Log first 5 middlewares
+# Development settings
+hooks.Filters.ENV_PATCHES.add_items([
+    ("openedx-lms-development-settings", """
+# ABSOLUTELY NO MFE FOR AUTH IN DEV
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
 """),
 ])
 
 ########################################
-# TEMPLATE PATCHES
+# URL OVERRIDES
 ########################################
 
 # Path to patches directory
