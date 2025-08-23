@@ -15,18 +15,9 @@ from .__about__ import __version__
 ########################################
 
 hooks.Filters.CONFIG_DEFAULTS.add_items([
-    # Add any plugin-specific settings here
+    # Plugin settings
     ("SSO_REDIRECT_ENABLED", True),
-    ("SSO_OIDC_ENDPOINT", "/auth/login/oidc/"),
-    ("SSO_PROVIDER_NAME", "azuread-oauth2"),  # Default provider, can be changed
-])
-
-hooks.Filters.CONFIG_UNIQUE.add_items([
-    # Add unique configuration items here
-])
-
-hooks.Filters.CONFIG_OVERRIDES.add_items([
-    # Override any existing settings here
+    ("SSO_REDIRECT_URL", "/auth/login/oidc/"),  # Default SSO URL
 ])
 
 ########################################
@@ -40,33 +31,27 @@ hooks.Filters.ENV_PATCHES.add_items([
 # Disable standard login/registration
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = True
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
-FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
-
-# Configure authentication backends
-AUTHENTICATION_BACKENDS = (
-    'social_core.backends.azuread.AzureADOAuth2',
-    'django.contrib.auth.backends.ModelBackend',
-)
+FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
 
 # Middleware to handle auth redirects
 MIDDLEWARE += ['tutorssoredirect.middleware.SSORedirectMiddleware']
 
-# Social auth configuration
-SOCIAL_AUTH_STRATEGY = 'third_party_auth.strategy.ConfigurationModelStrategy'
-SOCIAL_AUTH_STORAGE = 'third_party_auth.models.OAuth2ProviderConfig'
-
 # Redirect settings
-LOGIN_URL = '{{ SSO_OIDC_ENDPOINT }}'
+LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 
 # Disable password reset
 FEATURES['ENABLE_PASSWORD_RESET'] = False
-"""),
-    ("openedx-lms-production-settings", """
-# Production SSO settings
-SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
-SESSION_COOKIE_SECURE = True
+FEATURES['ENABLE_CHANGE_USER_PASSWORD_ADMIN'] = False
+FEATURES['ENABLE_ACCOUNT_PASSWORD_RESET'] = False
+
+# Disable account activation
+FEATURES['ENABLE_ACCOUNT_ACTIVATION'] = False
+FEATURES['SKIP_EMAIL_VERIFICATION'] = True
+
+# Registration redirect
+REGISTRATION_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 """),
 ])
 
@@ -77,14 +62,8 @@ hooks.Filters.ENV_PATCHES.add_items([
 FEATURES['DISABLE_STUDIO_SSO_OVER_LMS'] = False
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
 
-# Use same authentication backends as LMS
-AUTHENTICATION_BACKENDS = (
-    'social_core.backends.azuread.AzureADOAuth2',
-    'django.contrib.auth.backends.ModelBackend',
-)
-
-# Redirect CMS login to LMS SSO
-LOGIN_URL = '/auth/login/oidc/'
+# Redirect CMS login to SSO
+LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
 """),
 ])
 
@@ -101,20 +80,6 @@ patches_dir = pkg_resources.resource_filename(
 for patch_file in glob(os.path.join(patches_dir, "*.yml")):
     with open(patch_file) as f:
         hooks.Filters.ENV_PATCHES.add_item((os.path.basename(patch_file)[:-4], f.read()))
-
-########################################
-# TEMPLATE RENDERING
-########################################
-
-# Load templates
-hooks.Filters.ENV_TEMPLATE_ROOTS.add_item(
-    pkg_resources.resource_filename("tutorssoredirect", "templates")
-)
-
-# Add variables to be available in templates
-hooks.Filters.ENV_TEMPLATE_VARIABLES.add_items([
-    ("sso_redirect_version", __version__),
-])
 
 ########################################
 # PLUGIN INITIALIZATION

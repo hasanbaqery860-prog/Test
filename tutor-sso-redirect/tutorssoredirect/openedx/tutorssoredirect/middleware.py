@@ -4,7 +4,6 @@ Intercepts login and registration requests and redirects to SSO
 """
 from django.conf import settings
 from django.shortcuts import redirect
-from django.urls import reverse
 from django.utils.deprecation import MiddlewareMixin
 
 
@@ -31,7 +30,7 @@ class SSORedirectMiddleware(MiddlewareMixin):
         '/logout',
         '/api/user/v1/account/logout_session/',
         '/admin/',  # Django admin
-        '/api/',  # API endpoints
+        '/api/',  # API endpoints (except login)
         '/static/',  # Static files
         '/media/',  # Media files
         '/heartbeat',  # Health check
@@ -57,15 +56,15 @@ class SSORedirectMiddleware(MiddlewareMixin):
         # Check if this is an authentication URL that should be redirected
         for auth_url in self.AUTH_URLS:
             if path == auth_url.rstrip('/') or path.endswith(auth_url.rstrip('/')):
-                # Get the SSO endpoint from settings
-                sso_endpoint = getattr(settings, 'SSO_OIDC_ENDPOINT', '/auth/login/oidc/')
+                # Get the SSO URL from settings
+                sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
                 
                 # Preserve the 'next' parameter if it exists
                 next_url = request.GET.get('next', '')
                 if next_url:
-                    return redirect(f"{sso_endpoint}?next={next_url}")
+                    return redirect(f"{sso_url}?next={next_url}")
                 else:
-                    return redirect(sso_endpoint)
+                    return redirect(sso_url)
         
         return None
     
@@ -80,14 +79,14 @@ class SSORedirectMiddleware(MiddlewareMixin):
             # If redirecting to a login/register page, redirect to SSO instead
             for auth_url in self.AUTH_URLS:
                 if auth_url in redirect_url:
-                    sso_endpoint = getattr(settings, 'SSO_OIDC_ENDPOINT', '/auth/login/oidc/')
+                    sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
                     
                     # Preserve any 'next' parameter
                     if 'next=' in redirect_url:
                         next_param = redirect_url.split('next=')[1].split('&')[0]
-                        response['Location'] = f"{sso_endpoint}?next={next_param}"
+                        response['Location'] = f"{sso_url}?next={next_param}"
                     else:
-                        response['Location'] = sso_endpoint
+                        response['Location'] = sso_url
                     break
         
         return response

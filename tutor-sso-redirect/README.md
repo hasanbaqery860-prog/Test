@@ -1,12 +1,11 @@
 # Tutor SSO Redirect Plugin
 
-This Tutor plugin disables the default Open edX login and registration pages and redirects all authentication requests to an SSO provider using OpenID Connect (OIDC).
+This Tutor plugin disables the default Open edX login and registration pages and redirects all authentication requests to your pre-configured SSO endpoint.
 
 ## Features
 
 - Completely disables native Open edX login and registration
-- Redirects all authentication requests to `/auth/login/oidc/`
-- Configurable SSO endpoint
+- Redirects all authentication requests to your SSO endpoint
 - Preserves "next" URL parameter for post-login redirection
 - Disables password reset functionality
 - Works with both LMS and CMS (Studio)
@@ -16,7 +15,7 @@ This Tutor plugin disables the default Open edX login and registration pages and
 
 - Tutor >= 18.0.0
 - Open edX Teak release or later
-- An SSO provider that supports OpenID Connect (e.g., Azure AD, Keycloak, Auth0)
+- Pre-configured SSO authentication (e.g., Auth0, Azure AD, Keycloak)
 
 ## Installation
 
@@ -58,48 +57,17 @@ tutor local launch
 
 ## Configuration
 
-### Basic Configuration
-
-The plugin provides several configuration options that can be set using `tutor config`:
+The plugin provides two configuration options:
 
 ```bash
 # Enable/disable the SSO redirect (default: true)
 tutor config save --set SSO_REDIRECT_ENABLED=true
 
-# Set the SSO endpoint (default: /auth/login/oidc/)
-tutor config save --set SSO_OIDC_ENDPOINT="/auth/login/oidc/"
-
-# Set the SSO provider name (default: azuread-oauth2)
-tutor config save --set SSO_PROVIDER_NAME="azuread-oauth2"
+# Set the SSO redirect URL (default: /auth/login/oidc/)
+tutor config save --set SSO_REDIRECT_URL="/auth/login/oidc/"
 ```
 
-### Configuring Your SSO Provider
-
-You'll need to configure your SSO provider in the Django admin:
-
-1. Access the Django admin at `https://your-lms-domain/admin`
-2. Navigate to **Third Party Auth** → **OAuth2 Provider Config**
-3. Add a new provider configuration with your SSO details:
-   - **Provider**: Choose your provider type
-   - **Name**: A display name for the provider
-   - **Client ID**: Your OAuth2 client ID
-   - **Client Secret**: Your OAuth2 client secret
-   - **Other settings**: Configure according to your provider's requirements
-
-### Azure AD Example Configuration
-
-For Azure AD, you would typically configure:
-
-- **Provider**: `azuread-oauth2`
-- **Name**: `Azure AD`
-- **Client ID**: Your Azure application ID
-- **Client Secret**: Your Azure application secret
-- **Other settings**:
-  ```json
-  {
-    "tenant": "your-tenant-id"
-  }
-  ```
+If your SSO is configured at a different URL, update `SSO_REDIRECT_URL` accordingly.
 
 ## How It Works
 
@@ -130,6 +98,20 @@ The plugin works by:
 - Static and media files
 - Health check endpoints
 
+## Testing
+
+Use the included test script to verify the redirects are working:
+
+```bash
+python test_redirect.py https://your-lms-domain
+
+# Expected output:
+# ✓ /login -> /auth/login/oidc/
+# ✓ /register -> /auth/login/oidc/
+# ✓ /signin -> /auth/login/oidc/
+# ✓ /signup -> /auth/login/oidc/
+```
+
 ## Customization
 
 ### Modifying Redirect URLs
@@ -144,9 +126,15 @@ AUTH_URLS = [
 ]
 ```
 
-### Changing the SSO Provider
+### Changing the SSO Redirect URL
 
-To use a different SSO provider (e.g., Google, GitHub), update the `AUTHENTICATION_BACKENDS` in the plugin patches and ensure the corresponding social auth backend is installed.
+If your SSO endpoint is different from `/auth/login/oidc/`, update it using:
+
+```bash
+tutor config save --set SSO_REDIRECT_URL="/your/sso/endpoint/"
+tutor config save
+tutor local restart
+```
 
 ## Troubleshooting
 
@@ -156,18 +144,23 @@ To use a different SSO provider (e.g., Google, GitHub), update the `AUTHENTICATI
 2. Check that images were rebuilt: `tutor images build openedx`
 3. Verify middleware is loaded: Check LMS logs for middleware initialization
 
-### SSO Login Fails
-
-1. Verify your SSO provider configuration in Django admin
-2. Check that the callback URL is correctly configured in your SSO provider
-3. Review LMS logs for authentication errors
-
 ### Redirect Loops
 
 If you experience redirect loops:
-1. Ensure your SSO provider is properly configured
+1. Ensure your SSO is properly configured
 2. Check that the `/auth/*` URLs are accessible
 3. Verify the `LOGIN_REDIRECT_URL` setting
+
+### Testing Redirects
+
+```bash
+# Test a specific URL
+curl -I https://your-lms-domain/login
+
+# Should return:
+# HTTP/1.1 302 Found
+# Location: /auth/login/oidc/
+```
 
 ## Development
 

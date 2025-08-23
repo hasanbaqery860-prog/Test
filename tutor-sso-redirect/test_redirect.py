@@ -6,7 +6,7 @@ import requests
 import sys
 
 
-def test_sso_redirect(base_url):
+def test_sso_redirect(base_url, expected_redirect="/auth/login/oidc/"):
     """Test that login/register URLs redirect to SSO"""
     
     # URLs to test
@@ -18,6 +18,7 @@ def test_sso_redirect(base_url):
     ]
     
     print(f"Testing SSO redirect on {base_url}")
+    print(f"Expected redirect: {expected_redirect}")
     print("-" * 50)
     
     all_passed = True
@@ -30,10 +31,10 @@ def test_sso_redirect(base_url):
             
             if response.status_code in [301, 302]:
                 redirect_location = response.headers.get('Location', '')
-                if '/auth/login/oidc/' in redirect_location:
+                if expected_redirect in redirect_location:
                     print(f"✓ {url} -> {redirect_location}")
                 else:
-                    print(f"✗ {url} -> {redirect_location} (unexpected redirect)")
+                    print(f"✗ {url} -> {redirect_location} (expected {expected_redirect})")
                     all_passed = False
             else:
                 print(f"✗ {url} -> Status {response.status_code} (expected redirect)")
@@ -54,11 +55,14 @@ def test_sso_redirect(base_url):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python test_redirect.py <base_url>")
+    if len(sys.argv) < 2:
+        print("Usage: python test_redirect.py <base_url> [expected_redirect]")
         print("Example: python test_redirect.py http://local.overhang.io")
+        print("Example: python test_redirect.py http://local.overhang.io /custom/sso/")
         sys.exit(1)
     
     base_url = sys.argv[1]
-    exit_code = test_sso_redirect(base_url)
+    expected_redirect = sys.argv[2] if len(sys.argv) > 2 else "/auth/login/oidc/"
+    
+    exit_code = test_sso_redirect(base_url, expected_redirect)
     sys.exit(exit_code)

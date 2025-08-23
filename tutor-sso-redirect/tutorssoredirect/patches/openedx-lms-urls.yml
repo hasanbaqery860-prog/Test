@@ -8,7 +8,7 @@ content: |
   # Create a view that redirects to SSO
   def sso_redirect_view(request):
       """Redirect all auth requests to SSO"""
-      sso_url = getattr(settings, 'SSO_OIDC_ENDPOINT', '/auth/login/oidc/')
+      sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
       next_url = request.GET.get('next', '')
       if next_url:
           return redirect(f"{sso_url}?next={next_url}")
