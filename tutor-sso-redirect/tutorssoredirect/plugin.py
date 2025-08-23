@@ -56,9 +56,21 @@ AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
 )
 
-# Social auth settings
-SOCIAL_AUTH_STRATEGY = 'third_party_auth.strategy.ConfigurationModelStrategy'
-SOCIAL_AUTH_STORAGE = 'third_party_auth.models.OAuth2ProviderConfig'
+# Social auth settings - Use the CORRECT strategy path
+try:
+    # Try the common_djangoapps path first (newer versions)
+    from common.djangoapps.third_party_auth.strategy import ConfigurationModelStrategy
+    SOCIAL_AUTH_STRATEGY = 'common.djangoapps.third_party_auth.strategy.ConfigurationModelStrategy'
+except ImportError:
+    # Fallback to older path
+    SOCIAL_AUTH_STRATEGY = 'third_party_auth.strategy.ConfigurationModelStrategy'
+
+# Storage backend
+try:
+    from common.djangoapps.third_party_auth.models import OAuth2ProviderConfig
+    SOCIAL_AUTH_STORAGE = 'common.djangoapps.third_party_auth.models.OAuth2ProviderConfig'
+except ImportError:
+    SOCIAL_AUTH_STORAGE = 'third_party_auth.models.OAuth2ProviderConfig'
 
 # OIDC Configuration
 SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = '{{ SSO_OIDC_ENDPOINT }}'
@@ -79,20 +91,38 @@ SOCIAL_AUTH_AUTO_CREATE_USERS = True
 FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
 
-# User creation pipeline
+# User creation pipeline - Use standard social_core pipeline
 SOCIAL_AUTH_PIPELINE = (
+    # Get the information we can about the user and return it in a simple
+    # format to create the user instance later. On some cases the details are
+    # already part of the auth response from the provider, but sometimes this
+    # could hit a provider API.
     'social_core.pipeline.social_auth.social_details',
+
+    # Get the social uid from whichever service we're authing thru. The uid is
+    # the unique identifier of the given user in the provider.
     'social_core.pipeline.social_auth.social_uid',
+
+    # Verifies that the current auth process is valid within the current
+    # project, this is where emails and domains whitelists are applied (if
+    # defined).
     'social_core.pipeline.social_auth.auth_allowed',
+
+    # Checks if the current social-account is already associated in the site.
     'social_core.pipeline.social_auth.social_user',
+
+    # Make up a username if one is not provided
     'social_core.pipeline.user.get_username',
+
+    # Create a user if one doesn't exist
     'social_core.pipeline.user.create_user',
+
+    # Create the user<->social association
     'social_core.pipeline.social_auth.associate_user',
+
+    # Populate user data
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
-    'third_party_auth.pipeline.ensure_user_information',
-    'third_party_auth.pipeline.set_logged_in_cookies',  # THIS IS IMPORTANT FOR SESSION
-    'third_party_auth.pipeline.login_analytics',
 )
 
 # Session and cookie settings for SSO
@@ -108,10 +138,15 @@ LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
+SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/dashboard'
 
 # Username generation from email
 SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL = True
 SOCIAL_AUTH_PROTECTED_USER_FIELDS = ['email', 'first_name', 'last_name']
+SOCIAL_AUTH_SANITIZE_REDIRECTS = False
+
+# Force login through social auth
+SOCIAL_AUTH_FORCE_POST_DISCONNECT = False
 
 # Define the SSO redirect middleware inline
 from django.conf import settings
@@ -244,7 +279,7 @@ LOGGING['loggers']['social'] = {
     'propagate': False,
 }
 
-LOGGING['loggers']['third_party_auth'] = {
+LOGGING['loggers']['oauth2_provider'] = {
     'handlers': ['console'],
     'level': 'DEBUG',
     'propagate': False,
