@@ -1,0 +1,331 @@
+# Zitadel Self-Hosted with Open edX Integration Guide (Simple Version)
+
+This guide shows how to integrate Zitadel with Open edX using the built-in OIDC support. No SSL/nginx required for development.
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- Open edX instance with Tutor
+
+## Step 1: Setup Zitadel
+
+### Create Directory and Files
+
+```bash
+mkdir zitadel-setup && cd zitadel-setup
+```
+
+### Create docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v2.42.0
+    command: ["start-from-init", "--masterkeyFromEnv", "--tlsMode", "disabled"]
+    environment:
+      - ZITADEL_EXTERNALPORT=8090
+      - ZITADEL_EXTERNALDOMAIN=localhost  # Use localhost for local development
+      - ZITADEL_EXTERNALSECURE=false
+      - ZITADEL_MASTERKEY=GVLVFDTSIFXndQLNMd3H6yvwP3cTlnHC
+      - ZITADEL_DATABASE_POSTGRES_HOST=postgres
+      - ZITADEL_DATABASE_POSTGRES_PORT=5432
+      - ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel
+      - ZITADEL_DATABASE_POSTGRES_USER_USERNAME=zitadel
+      - ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=zitadel
+      - ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable
+      - ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=postgres
+      - ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=postgres
+      - ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable
+      - ZITADEL_FIRSTINSTANCE_ORG_NAME=MyOrganization
+      - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME=admin@example.com
+      - ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD=Admin123!
+      # Optional: SMS Provider for Kavenegar (uncomment and add your API key)
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_ENABLED=true
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_PROVIDER=HTTP
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_ENDPOINT=https://api.kavenegar.com/v1/YOUR_API_KEY/sms/send.json
+      # - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_METHOD=POST
+    ports:
+      - '8090:8080'  # Changed to 8090 to avoid conflicts
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=zitadel
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
+```
+
+### Start Zitadel
+
+```bash
+# NOTE: For IP-based access, use 'localhost' in ZITADEL_EXTERNALDOMAIN
+# Then access via http://YOUR_SERVER_IP:8090
+
+# IMPORTANT: If you get password errors, clean up old data first:
+docker compose down -v
+docker volume rm zitadel-setup_postgres-data 2>/dev/null || true
+
+# Start fresh
+docker compose up -d
+
+# Check logs
+docker compose logs -f zitadel
+```
+
+Wait until you see: `server is listening on [::]:8080` (internal port)
+
+## Step 2: Configure Zitadel
+
+1. Access Zitadel at `http://YOUR_SERVER_IP:8090` (where YOUR_SERVER_IP is your actual server IP)
+2. Login: `admin@example.com` / `Admin123!`
+3. Create a new Project:
+   - Click **Projects** in the left menu
+   - Click **Create New Project**
+   - Name: **Open edX** (or any name you prefer)
+   - Click **Continue**
+
+4. Create a new Application:
+   - In your project, click **New Application**
+   - **Name**: `Open edX App` (must not be empty)
+   - **Type**: Select **User Agent** (Web Application)
+   - Click **Continue**
+
+5. Configure Authentication:
+   - **Authentication Method**: Select **Code** (OIDC)
+   - Click **Continue**
+
+6. Configure Redirect URIs:
+   - **Redirect URIs**: Add these URIs (replace YOUR_OPENEDX_DOMAIN):
+     - `http://YOUR_OPENEDX_DOMAIN/auth/complete/oidc/`
+     - `http://YOUR_OPENEDX_DOMAIN/oauth2/redirect`
+   - **Post Logout URIs**: 
+     - `http://YOUR_OPENEDX_DOMAIN/logout`
+   - Click **Continue**
+
+7. Review and Create:
+   - Review the settings
+   - Click **Create**
+
+8. Get Credentials:
+   - After creation, you'll see the application details
+   - Note the **Client ID**
+   - Click **Regenerate Secret** to get a Client Secret
+   - Copy and save both values
+
+## Step 3: (Optional) Enable Phone Number + SMS OTP Login
+
+To enable login with ONLY phone number + SMS OTP:
+
+### Configure SMS Provider
+
+Check these locations in Zitadel Console:
+
+1. **Default Settings** → **Notifications** → **SMS**
+2. **Instance** → **Notification Providers**
+3. **Settings** → **Notification Settings**
+4. **Instance Settings** → **SMS Configuration**
+
+If you can't find SMS provider settings in the UI, add it via environment variables in docker-compose.yml:
+
+```yaml
+environment:
+  # SMS Provider Configuration for Kavenegar
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_ENABLED=true
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_PROVIDER=HTTP
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_ENDPOINT=https://api.kavenegar.com/v1/YOUR_API_KEY/sms/send.json
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_METHOD=POST
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_HEADERS_CONTENT-TYPE=application/x-www-form-urlencoded
+  - ZITADEL_NOTIFICATIONS_PROVIDERS_SMS_HTTP_BODY="receptor={{.Phone}}&sender=30008077778888&message={{.Text}}"
+```
+
+### Enable Passwordless Authentication
+
+1. Go to **Instance** → **Login Policy**
+2. Enable **Passwordless**
+3. Set **Passwordless Type**: SMS
+4. Disable **Username Password** if you want ONLY phone login
+
+### Configure Your Application
+
+1. In your Open edX application (from Step 2)
+2. Go to application settings
+3. Enable **Passwordless authentication**
+
+### Update Docker Compose (Alternative)
+
+Add these environment variables:
+```yaml
+- ZITADEL_DEFAULTINSTANCE_PASSWORDLESSENABLED=true
+- ZITADEL_DEFAULTINSTANCE_PASSWORDLESSTYPE=sms
+```
+
+Users can now login with just phone number + OTP code!
+
+For detailed SMS provider setup, see [zitadel-sms-provider-setup.md](./zitadel-sms-provider-setup.md)
+
+## Step 4: Configure Open edX with Tutor
+
+### Create Tutor Plugin
+
+Create file `$(tutor config printroot)/plugins/zitadel_oauth2.py`:
+
+```python
+from tutor import hooks
+
+# Update these values
+ZITADEL_DOMAIN = "http://YOUR_SERVER_IP:8090"  # Your Zitadel URL
+ZITADEL_CLIENT_ID = "YOUR_CLIENT_ID"          # From Zitadel
+ZITADEL_CLIENT_SECRET = "YOUR_CLIENT_SECRET"  # From Zitadel
+
+# LMS Configuration
+hooks.Filters.ENV_PATCHES.add_item(
+    (
+        "openedx-lms-common-settings",
+        f"""
+# Enable third party authentication
+FEATURES["ENABLE_THIRD_PARTY_AUTH"] = True
+FEATURES["ENABLE_COMBINED_LOGIN_REGISTRATION"] = True
+FEATURES["ALLOW_PUBLIC_ACCOUNT_CREATION"] = True
+
+# Use built-in OIDC backend
+THIRD_PARTY_AUTH_BACKENDS = ["social_core.backends.open_id_connect.OpenIdConnectAuth"]
+
+# Zitadel configuration
+SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = "{ZITADEL_DOMAIN}"
+SOCIAL_AUTH_OIDC_KEY = "{ZITADEL_CLIENT_ID}"
+SOCIAL_AUTH_OIDC_SECRET = "{ZITADEL_CLIENT_SECRET}"
+
+# Add to authentication backends
+AUTHENTICATION_BACKENDS = [
+    "social_core.backends.open_id_connect.OpenIdConnectAuth",
+] + list(AUTHENTICATION_BACKENDS)
+
+# Allow auto account creation
+SOCIAL_AUTH_REQUIRE_EXISTING_ACCOUNT = False
+SKIP_EMAIL_VERIFICATION = True
+
+# CORS for Zitadel
+CORS_ORIGIN_WHITELIST = list(CORS_ORIGIN_WHITELIST) + [
+    "{ZITADEL_DOMAIN}",
+]
+"""
+    )
+)
+
+# CMS Configuration
+hooks.Filters.ENV_PATCHES.add_item(
+    (
+        "openedx-cms-common-settings",
+        f"""
+FEATURES["ENABLE_THIRD_PARTY_AUTH"] = True
+THIRD_PARTY_AUTH_BACKENDS = ["social_core.backends.open_id_connect.OpenIdConnectAuth"]
+
+SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = "{ZITADEL_DOMAIN}"
+SOCIAL_AUTH_OIDC_KEY = "{ZITADEL_CLIENT_ID}"
+SOCIAL_AUTH_OIDC_SECRET = "{ZITADEL_CLIENT_SECRET}"
+
+AUTHENTICATION_BACKENDS = [
+    "social_core.backends.open_id_connect.OpenIdConnectAuth",
+] + list(AUTHENTICATION_BACKENDS)
+
+SOCIAL_AUTH_REQUIRE_EXISTING_ACCOUNT = False
+"""
+    )
+)
+```
+
+### Enable the Plugin
+
+```bash
+tutor plugins enable zitadel_oauth2
+tutor config save
+tutor images build openedx
+tutor local restart
+```
+
+## Step 4: Configure Provider in Django Admin
+
+1. Access: `http://YOUR_OPENEDX_DOMAIN/admin`
+2. Navigate to **Third Party Auth** → **OAuth2 Provider Config**
+3. Add new provider:
+   - **Name**: oidc
+   - **Slug**: oidc
+   - **Backend name**: `social_core.backends.open_id_connect.OpenIdConnectAuth`
+   - **Client ID**: (from Zitadel)
+   - **Client Secret**: (from Zitadel)
+   - **Skip registration form**: ✓
+   - **Skip email verification**: ✓
+   - **Enabled**: ✓
+
+## Testing
+
+1. Navigate to `http://YOUR_OPENEDX_DOMAIN/login`
+2. Click "Sign in with oidc"
+3. Login with Zitadel credentials
+4. You'll be redirected back to Open edX
+
+Direct OAuth URL:
+```
+http://YOUR_OPENEDX_DOMAIN/auth/login/oidc/?next=/dashboard
+```
+
+## Troubleshooting
+
+**Application Invalid Error (PROJECT-1n8df)**: This occurs when creating an application without all required fields:
+- Make sure to give the application a name (not empty)
+- Select "User Agent" as the type for web applications
+- Select "Code" for OIDC authentication
+- Add at least one redirect URI
+
+**Domain Invalid Character Error**: Zitadel requires a valid domain format. Use `localhost` in ZITADEL_EXTERNALDOMAIN, not an IP address. You can still access it via `http://YOUR_IP:8090`.
+
+**Port Already in Use**: If port 8090 is also in use, change the port mapping in docker-compose.yml (e.g., `9090:8080`).
+
+**PostgreSQL password authentication failed**: This happens when there's old data from a previous run. Fix it by:
+```bash
+docker compose down -v
+docker volume rm zitadel-setup_postgres-data
+docker compose up -d
+```
+
+**Connection refused**: Make sure to use the correct IP address that's accessible from your Open edX instance
+
+**OAuth Error**: Verify redirect URIs match exactly
+
+**No Login Button**: Check provider is enabled in Django Admin
+
+**Version warning**: The `version` attribute warning can be ignored, or remove the first line from docker-compose.yml
+
+**Can't Find SMS Provider Settings**: 
+- SMS provider location varies by Zitadel version
+- Check under **Notifications**, **Instance Settings**, or **Default Settings**
+- If not in UI, use environment variables in docker-compose.yml
+- Some versions might require API/config file setup
+
+**Can't Find Flows Menu**: 
+- Flows might not be available in all Zitadel versions
+- Use **Settings** → **Login Policy** or **Security Policy** instead
+- Enable built-in MFA options for simpler setup
+
+**SMS OTP Issues**: 
+- Make sure to replace `YOUR_KAVENEGAR_API_KEY` with your actual API key
+- Ensure users have verified phone numbers in Zitadel
+- Check Zitadel logs for action execution errors
+- Consider using built-in OTP Email if SMS setup is complex
+
+That's it! Zitadel is now integrated with Open edX.
