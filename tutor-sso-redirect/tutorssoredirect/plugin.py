@@ -18,6 +18,10 @@ hooks.Filters.CONFIG_DEFAULTS.add_items([
     # Plugin settings
     ("SSO_REDIRECT_ENABLED", True),
     ("SSO_REDIRECT_URL", "/auth/login/oidc/"),  # Default SSO URL
+    # OIDC Provider settings
+    ("SSO_OIDC_KEY", ""),  # Client ID from Zitadel
+    ("SSO_OIDC_SECRET", ""),  # Client Secret from Zitadel
+    ("SSO_OIDC_ENDPOINT", ""),  # Zitadel OIDC endpoint
 ])
 
 ########################################
@@ -41,6 +45,36 @@ FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
 FEATURES['SHOW_REGISTRATION_LINKS'] = False
 FEATURES['ENABLE_MKTG_SITE'] = False
+
+# ENABLE THIRD PARTY AUTH - THIS IS FUCKING IMPORTANT
+FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
+
+# Configure authentication backends - ADD OIDC BACKEND
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.open_id_connect.OpenIdConnectAuth',  # Generic OIDC backend
+    'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
+)
+
+# Social auth settings
+SOCIAL_AUTH_STRATEGY = 'third_party_auth.strategy.ConfigurationModelStrategy'
+SOCIAL_AUTH_STORAGE = 'third_party_auth.models.OAuth2ProviderConfig'
+
+# OIDC Configuration
+SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = '{{ SSO_OIDC_ENDPOINT }}'
+SOCIAL_AUTH_OIDC_KEY = '{{ SSO_OIDC_KEY }}'
+SOCIAL_AUTH_OIDC_SECRET = '{{ SSO_OIDC_SECRET }}'
+
+# Enable the OIDC backend
+THIRD_PARTY_AUTH_BACKENDS = ['social_core.backends.open_id_connect.OpenIdConnectAuth']
+
+# Additional OIDC settings
+SOCIAL_AUTH_OIDC_SCOPE = ['openid', 'profile', 'email']
+SOCIAL_AUTH_OIDC_ID_TOKEN_DECRYPTION_KEY = None
+
+# URL configuration
+LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
+LOGIN_REDIRECT_URL = '/dashboard'
+LOGOUT_REDIRECT_URL = '/'
 
 # Define the SSO redirect middleware inline
 from django.conf import settings
@@ -83,7 +117,7 @@ class SSORedirectMiddleware(MiddlewareMixin):
         
         if is_auth_url:
             # Skip if it's an API endpoint we need to keep
-            skip_patterns = ['/api/csrf/', '/static/', '/media/', '/admin/', '/oauth2/', '/auth/complete/', '/logout']
+            skip_patterns = ['/api/csrf/', '/static/', '/media/', '/admin/', '/oauth2/', '/auth/complete/', '/logout', '/auth/login/oidc/']
             if any(skip in path for skip in skip_patterns):
                 return None
             
@@ -129,11 +163,6 @@ sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 # Insert middleware at the BEGINNING of the stack
 MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 
-# Force all login URLs to our SSO
-LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
-LOGIN_REDIRECT_URL = '/dashboard'
-LOGOUT_REDIRECT_URL = '/'
-
 # Disable password reset
 FEATURES['ENABLE_PASSWORD_RESET'] = False
 FEATURES['ENABLE_CHANGE_USER_PASSWORD_ADMIN'] = False
@@ -175,6 +204,7 @@ hooks.Filters.ENV_PATCHES.add_items([
 # SSO Redirect Plugin Settings for CMS
 FEATURES['DISABLE_STUDIO_SSO_OVER_LMS'] = False
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
+FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
 
 # Redirect CMS login to SSO
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
@@ -191,6 +221,9 @@ hooks.Filters.ENV_PATCHES.add_items([
 AUTHN_MICROFRONTEND_URL = None
 AUTHN_MICROFRONTEND_DOMAIN = None
 ENABLE_AUTHN_MICROFRONTEND = False
+
+# Ensure third-party auth is enabled in production
+FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
 """),
 ])
 
@@ -201,6 +234,9 @@ hooks.Filters.ENV_PATCHES.add_items([
 AUTHN_MICROFRONTEND_URL = None
 AUTHN_MICROFRONTEND_DOMAIN = None
 ENABLE_AUTHN_MICROFRONTEND = False
+
+# Ensure third-party auth is enabled in dev
+FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
 """),
 ])
 
