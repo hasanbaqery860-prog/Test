@@ -1,0 +1,8 @@
+name: openedx-lms-production-settings
+content: |
+  # Disable authn MFE in production
+  AUTHN_MICROFRONTEND_URL = None
+  AUTHN_MICROFRONTEND_DOMAIN = None
+  
+  # Use classic login/register pages (which will be redirected by our middleware)
+  FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False

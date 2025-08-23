@@ -5,6 +5,7 @@ This Tutor plugin disables the default Open edX login and registration pages and
 ## Features
 
 - Completely disables native Open edX login and registration
+- Disables the authn MFE (Micro Frontend)
 - Redirects all authentication requests to your SSO endpoint
 - Preserves "next" URL parameter for post-login redirection
 - Disables password reset functionality
@@ -68,24 +69,26 @@ If your SSO is configured at a different URL, update `SSO_REDIRECT_URL` accordin
 The plugin works by:
 
 1. **Disabling native authentication**: Sets Django settings to disable registration and login features
-2. **Middleware interception**: Injects a middleware directly into the settings that intercepts all requests to login/register URLs
-3. **URL overrides**: Overrides the default URL patterns to redirect to SSO
-4. **Feature flags**: Disables various authentication-related features in Open edX
+2. **Disabling authn MFE**: Prevents the authentication micro-frontend from loading
+3. **Middleware interception**: Injects a middleware directly into the settings that intercepts all requests to login/register URLs
+4. **URL overrides**: Overrides the default URL patterns to redirect to SSO
+5. **Feature flags**: Disables various authentication-related features in Open edX
 
 ### URLs That Get Redirected
 
-- `/login`
-- `/register`
-- `/signin`
-- `/signup`
+- `/login`, `/register`, `/signin`, `/signup`
+- `/authn/login`, `/authn/register`, `/authn/logistration` (MFE URLs)
+- `/auth/login`, `/create_account`
 - `/user_api/v1/account/login_session/`
 - `/api/user/v1/account/login_session/`
 - `/user_api/v2/account/login_session/`
 - `/api/user/v2/account/login_session/`
+- Any URL containing login/register/signin/signup patterns
 
 ### URLs That Remain Accessible
 
-- `/auth/*` (all third-party auth URLs)
+- `/auth/login/oidc/` (or your configured SSO URL)
+- `/auth/complete/*` (OAuth completion URLs)
 - `/logout`
 - `/admin/*`
 - `/api/*` (except login endpoints)
@@ -104,6 +107,8 @@ python test_redirect.py https://your-lms-domain
 # ✓ /register -> /auth/login/oidc/
 # ✓ /signin -> /auth/login/oidc/
 # ✓ /signup -> /auth/login/oidc/
+# ✓ /authn/login -> /auth/login/oidc/
+# ✓ /authn/register -> /auth/login/oidc/
 ```
 
 ## Customization
@@ -124,18 +129,35 @@ To add or remove URLs from the redirect list, you'll need to modify the `AUTH_UR
 
 ## Troubleshooting
 
+### Authn MFE Still Accessible
+
+If you can still access `http://apps.local.openedx.io:1999/authn/login`:
+
+1. Clear your browser cache
+2. Ensure the plugin is properly installed and enabled
+3. Check that the configuration was saved: `tutor config save`
+4. Restart all services: `tutor local restart`
+5. If using Tutor dev mode: `tutor dev restart`
+
 ### Users Still See Login Page
 
 1. Ensure the plugin is enabled: `tutor plugins list`
 2. Verify configuration was saved: `tutor config save`
 3. Restart services: `tutor local restart`
 4. Clear browser cache
+5. Check that your SSO endpoint is working
+
+### Direct IP Access
+
+If accessing via IP address (e.g., `91.107.146.137:8000`), the redirect should still work. If not:
+1. Check that the plugin is enabled on that instance
+2. Ensure the SSO_REDIRECT_URL is accessible from that IP
 
 ### Redirect Loops
 
 If you experience redirect loops:
 1. Ensure your SSO is properly configured
-2. Check that the `/auth/*` URLs are accessible
+2. Check that the SSO endpoint URL is in the ALLOWED_URLS list
 3. Verify the `LOGIN_REDIRECT_URL` setting
 
 ### Testing Redirects
@@ -147,6 +169,11 @@ curl -I https://your-lms-domain/login
 # Should return:
 # HTTP/1.1 302 Found
 # Location: /auth/login/oidc/
+
+# Test authn MFE URL
+curl -I https://your-lms-domain/authn/login
+
+# Should also redirect
 ```
 
 ### Checking Logs

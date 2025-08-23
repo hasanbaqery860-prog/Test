@@ -15,6 +15,11 @@ def test_sso_redirect(base_url, expected_redirect="/auth/login/oidc/"):
         "/register",
         "/signin",
         "/signup",
+        "/authn/login",
+        "/authn/register",
+        "/authn/logistration",
+        "/auth/login",
+        "/create_account",
     ]
     
     print(f"Testing SSO redirect on {base_url}")

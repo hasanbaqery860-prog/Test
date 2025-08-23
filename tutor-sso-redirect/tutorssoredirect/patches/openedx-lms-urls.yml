@@ -14,10 +14,13 @@ content: |
           return redirect(f"{sso_url}?next={next_url}")
       return redirect(sso_url)
   
-  # Override authentication URLs
-  urlpatterns += [
+  # Override authentication URLs - add these patterns first to take precedence
+  urlpatterns = [
       re_path(r'^login/?$', sso_redirect_view, name='signin_user'),
       re_path(r'^register/?$', sso_redirect_view, name='register_user'),
       re_path(r'^signin/?$', sso_redirect_view, name='login'),
       re_path(r'^signup/?$', sso_redirect_view, name='register'),
-  ]
+      re_path(r'^authn/.*$', sso_redirect_view, name='authn_redirect'),
+      re_path(r'^auth/login/?$', sso_redirect_view, name='auth_login'),
+      re_path(r'^create_account/?$', sso_redirect_view, name='create_account'),
+  ] + urlpatterns
