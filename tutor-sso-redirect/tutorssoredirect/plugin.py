@@ -56,21 +56,9 @@ AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
 )
 
-# Social auth settings - Use the CORRECT strategy path
-try:
-    # Try the common_djangoapps path first (newer versions)
-    from common.djangoapps.third_party_auth.strategy import ConfigurationModelStrategy
-    SOCIAL_AUTH_STRATEGY = 'common.djangoapps.third_party_auth.strategy.ConfigurationModelStrategy'
-except ImportError:
-    # Fallback to older path
-    SOCIAL_AUTH_STRATEGY = 'third_party_auth.strategy.ConfigurationModelStrategy'
-
-# Storage backend
-try:
-    from common.djangoapps.third_party_auth.models import OAuth2ProviderConfig
-    SOCIAL_AUTH_STORAGE = 'common.djangoapps.third_party_auth.models.OAuth2ProviderConfig'
-except ImportError:
-    SOCIAL_AUTH_STORAGE = 'third_party_auth.models.OAuth2ProviderConfig'
+# Social auth settings - Just use the strings, don't import
+SOCIAL_AUTH_STRATEGY = 'common.djangoapps.third_party_auth.strategy.ConfigurationModelStrategy'
+SOCIAL_AUTH_STORAGE = 'common.djangoapps.third_party_auth.models.OAuth2ProviderConfig'
 
 # OIDC Configuration
 SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = '{{ SSO_OIDC_ENDPOINT }}'
@@ -123,6 +111,10 @@ SOCIAL_AUTH_PIPELINE = (
     # Populate user data
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
+    
+    # Add the session/login step - THIS IS CRITICAL
+    'common.djangoapps.third_party_auth.pipeline.user_details_force_sync',
+    'common.djangoapps.third_party_auth.pipeline.set_logged_in_cookies',
 )
 
 # Session and cookie settings for SSO
@@ -139,6 +131,7 @@ LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/dashboard'
+SOCIAL_AUTH_INACTIVE_USER_URL = '/dashboard'
 
 # Username generation from email
 SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL = True
@@ -167,7 +160,7 @@ class SSORedirectMiddleware(MiddlewareMixin):
         path = request.path.lower().rstrip('/')
         
         # Skip if user is already authenticated
-        if request.user.is_authenticated:
+        if hasattr(request, 'user') and request.user.is_authenticated:
             return None
             
         # List of auth-related URLs to intercept
@@ -280,6 +273,12 @@ LOGGING['loggers']['social'] = {
 }
 
 LOGGING['loggers']['oauth2_provider'] = {
+    'handlers': ['console'],
+    'level': 'DEBUG',
+    'propagate': False,
+}
+
+LOGGING['loggers']['common.djangoapps.third_party_auth'] = {
     'handlers': ['console'],
     'level': 'DEBUG',
     'propagate': False,
