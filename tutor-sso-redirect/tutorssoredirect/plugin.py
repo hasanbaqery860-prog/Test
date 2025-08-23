@@ -56,9 +56,9 @@ AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
 )
 
-# Social auth settings - Just use the strings, don't import
-SOCIAL_AUTH_STRATEGY = 'common.djangoapps.third_party_auth.strategy.ConfigurationModelStrategy'
-SOCIAL_AUTH_STORAGE = 'common.djangoapps.third_party_auth.models.OAuth2ProviderConfig'
+# Social auth settings - Use the default Django storage instead of the problematic one
+SOCIAL_AUTH_STRATEGY = 'social_django.strategy.DjangoStrategy'
+SOCIAL_AUTH_STORAGE = 'social_django.models.DjangoStorage'
 
 # OIDC Configuration
 SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = '{{ SSO_OIDC_ENDPOINT }}'
@@ -74,29 +74,55 @@ SOCIAL_AUTH_OIDC_ID_TOKEN_DECRYPTION_KEY = None
 SOCIAL_AUTH_OIDC_USERNAME_KEY = 'preferred_username'
 SOCIAL_AUTH_OIDC_USE_NONCE = True
 
+# Override the backend to get settings from Django settings instead of DB
+def get_oidc_setting(name, default=None):
+    '''Get OIDC settings from Django settings'''
+    return globals().get(f'SOCIAL_AUTH_OIDC_{name}', default)
+
+# Monkey patch the OIDC backend to use our settings
+try:
+    from social_core.backends.open_id_connect import OpenIdConnectAuth
+    
+    # Store original method
+    _original_setting = OpenIdConnectAuth.setting
+    
+    def patched_setting(self, name, default=None):
+        # First try to get from our settings
+        value = get_oidc_setting(name, None)
+        if value is not None:
+            return value
+        # Fallback to original method
+        return _original_setting(self, name, default)
+    
+    # Apply patch
+    OpenIdConnectAuth.setting = patched_setting
+    
+    # Also patch the oidc_endpoint method to use our endpoint directly
+    def patched_oidc_endpoint(self):
+        return get_oidc_setting('OIDC_ENDPOINT', '').rstrip('/')
+    
+    OpenIdConnectAuth.oidc_endpoint = patched_oidc_endpoint
+    
+except ImportError:
+    pass
+
 # AUTO CREATE USERS FROM SSO - THIS IS CRITICAL
 SOCIAL_AUTH_AUTO_CREATE_USERS = True
 FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
 
-# User creation pipeline - Use standard social_core pipeline
+# User creation pipeline - Use standard social_core pipeline with session creation
 SOCIAL_AUTH_PIPELINE = (
-    # Get the information we can about the user and return it in a simple
-    # format to create the user instance later. On some cases the details are
-    # already part of the auth response from the provider, but sometimes this
-    # could hit a provider API.
+    # Get the information we can about the user and return it
     'social_core.pipeline.social_auth.social_details',
 
-    # Get the social uid from whichever service we're authing thru. The uid is
-    # the unique identifier of the given user in the provider.
+    # Get the social uid from whichever service we're authing thru
     'social_core.pipeline.social_auth.social_uid',
 
-    # Verifies that the current auth process is valid within the current
-    # project, this is where emails and domains whitelists are applied (if
-    # defined).
+    # Verifies that the current auth process is valid
     'social_core.pipeline.social_auth.auth_allowed',
 
-    # Checks if the current social-account is already associated in the site.
+    # Checks if the current social-account is already associated
     'social_core.pipeline.social_auth.social_user',
 
     # Make up a username if one is not provided
@@ -112,9 +138,8 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
     
-    # Add the session/login step - THIS IS CRITICAL
-    'common.djangoapps.third_party_auth.pipeline.user_details_force_sync',
-    'common.djangoapps.third_party_auth.pipeline.set_logged_in_cookies',
+    # Force login - this should create the session
+    'social_django.pipeline.login_user',
 )
 
 # Session and cookie settings for SSO
