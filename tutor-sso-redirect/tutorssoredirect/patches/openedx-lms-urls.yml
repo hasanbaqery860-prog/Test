@@ -1,0 +1,23 @@
+name: openedx-lms-urls
+content: |
+  # Import required modules
+  from django.urls import re_path
+  from django.shortcuts import redirect
+  from django.conf import settings
+  
+  # Create a view that redirects to SSO
+  def sso_redirect_view(request):
+      """Redirect all auth requests to SSO"""
+      sso_url = getattr(settings, 'SSO_OIDC_ENDPOINT', '/auth/login/oidc/')
+      next_url = request.GET.get('next', '')
+      if next_url:
+          return redirect(f"{sso_url}?next={next_url}")
+      return redirect(sso_url)
+  
+  # Override authentication URLs
+  urlpatterns += [
+      re_path(r'^login/?$', sso_redirect_view, name='signin_user'),
+      re_path(r'^register/?$', sso_redirect_view, name='register_user'),
+      re_path(r'^signin/?$', sso_redirect_view, name='login'),
+      re_path(r'^signup/?$', sso_redirect_view, name='register'),
+  ]

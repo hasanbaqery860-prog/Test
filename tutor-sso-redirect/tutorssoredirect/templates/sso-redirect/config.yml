@@ -1,0 +1,40 @@
+# SSO Redirect Plugin Configuration Template
+# 
+# This file provides example configurations for common OIDC providers.
+# Copy the relevant section to your tutor config.yml and modify as needed.
+
+# Azure AD Configuration
+azuread:
+  SSO_PROVIDER_NAME: "azuread-oauth2"
+  SOCIAL_AUTH_AZUREAD_OAUTH2_KEY: "your-client-id"
+  SOCIAL_AUTH_AZUREAD_OAUTH2_SECRET: "your-client-secret"
+  SOCIAL_AUTH_AZUREAD_OAUTH2_TENANT_ID: "your-tenant-id"
+
+# Keycloak Configuration
+keycloak:
+  SSO_PROVIDER_NAME: "oidc"
+  SOCIAL_AUTH_OIDC_OIDC_ENDPOINT: "https://your-keycloak-server/auth/realms/your-realm"
+  SOCIAL_AUTH_OIDC_KEY: "your-client-id"
+  SOCIAL_AUTH_OIDC_SECRET: "your-client-secret"
+  SOCIAL_AUTH_OIDC_ID_TOKEN_DECRYPTION_KEY: ""
+
+# Auth0 Configuration
+auth0:
+  SSO_PROVIDER_NAME: "auth0"
+  SOCIAL_AUTH_AUTH0_DOMAIN: "your-domain.auth0.com"
+  SOCIAL_AUTH_AUTH0_KEY: "your-client-id"
+  SOCIAL_AUTH_AUTH0_SECRET: "your-client-secret"
+  SOCIAL_AUTH_AUTH0_SCOPE: ["openid", "profile", "email"]
+
+# Google OAuth2 Configuration
+google:
+  SSO_PROVIDER_NAME: "google-oauth2"
+  SOCIAL_AUTH_GOOGLE_OAUTH2_KEY: "your-client-id"
+  SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET: "your-client-secret"
+
+# Generic OIDC Configuration
+generic_oidc:
+  SSO_PROVIDER_NAME: "oidc"
+  SOCIAL_AUTH_OIDC_OIDC_ENDPOINT: "https://your-oidc-provider.com"
+  SOCIAL_AUTH_OIDC_KEY: "your-client-id"
+  SOCIAL_AUTH_OIDC_SECRET: "your-client-secret"
