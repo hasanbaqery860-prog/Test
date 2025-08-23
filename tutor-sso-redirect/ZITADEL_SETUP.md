@@ -45,6 +45,9 @@ In Django Admin:
    - **Site**: Select your site
    - **Skip registration form**: ✓ (checked)
    - **Skip email verification**: ✓ (checked)
+   - **Send welcome email**: ☐ (unchecked)
+   - **Visible**: ✓ (checked)
+   - **Enable sso id verification**: ☐ (unchecked)
    - **Backend name**: `social_core.backends.open_id_connect.OpenIdConnectAuth`
    - **Client ID**: (same as SSO_OIDC_KEY)
    - **Client Secret**: (same as SSO_OIDC_SECRET)
@@ -57,25 +60,45 @@ In Django Admin:
 
 4. Click **Save**
 
-## 4. Add Redirect URLs in Zitadel
+## 4. Configure Zitadel Application
 
-In your Zitadel application settings, add these redirect URLs:
+In your Zitadel application:
 
+### Application Settings:
+1. **Application Type**: Web Application
+2. **Authentication Method**: Code
+3. **Grant Types**: Authorization Code, Refresh Token
+
+### Redirect URLs:
+Add ALL of these:
 ```
 http://localhost:8000/auth/complete/oidc/
 http://localhost:8001/auth/complete/oidc/
 http://91.107.146.137:8000/auth/complete/oidc/
 http://91.107.146.137:8001/auth/complete/oidc/
 http://apps.local.openedx.io:1999/auth/complete/oidc/
+https://your-domain.com/auth/complete/oidc/
 ```
 
-Also add post-logout redirect URLs:
+### Post Logout Redirect URLs:
 ```
 http://localhost:8000/
 http://localhost:8001/
 http://91.107.146.137:8000/
 http://91.107.146.137:8001/
+https://your-domain.com/
 ```
+
+### Token Settings:
+- **Auth Token Type**: JWT
+- **Access Token Type**: JWT
+- **ID Token Userinfo**: ✓ (Add userinfo inside ID token)
+
+### Scopes:
+Ensure these scopes are enabled:
+- `openid`
+- `profile`
+- `email`
 
 ## 5. Restart Services
 
@@ -83,32 +106,63 @@ http://91.107.146.137:8001/
 tutor local restart
 ```
 
-## 6. Test It
+## 6. Test Authentication
 
 1. Go to http://localhost:8000/login
 2. You should be redirected to Zitadel
 3. Login with your Zitadel credentials
 4. You should be redirected back to Open edX dashboard
 
-## Troubleshooting
+## 7. Debug Authentication Issues
 
-### "Can't fetch setting of a disabled backend/provider"
-
-This means the OIDC provider isn't configured in Django admin. Follow step 3 above.
-
-### "Invalid client" error from Zitadel
-
-Check that:
-- Client ID matches exactly (including @projectname suffix)
-- Client secret is correct
-- Redirect URLs are added in Zitadel
-
-### Still redirecting to MFE
-
-Clear your browser cache and cookies, then try again.
-
-### Check if OIDC is enabled
+If the user is not being logged in after returning from Zitadel:
 
 ```bash
-tutor local exec lms python -c "from django.conf import settings; print('OIDC enabled:', settings.FEATURES.get('ENABLE_THIRD_PARTY_AUTH', False))"
+# Check authentication debug info
+tutor local exec lms python /openedx/debug_auth.py
+
+# Check logs during login attempt
+tutor local logs -f lms | grep -E "(social|third_party_auth|SSO)"
+
+# Check if user was created
+tutor local exec lms ./manage.py lms shell
+>>> from django.contrib.auth import get_user_model
+>>> User = get_user_model()
+>>> User.objects.filter(email='your-email@example.com').exists()
+```
+
+## Common Issues
+
+### "Can't fetch setting of a disabled backend/provider"
+- The OIDC provider isn't configured in Django admin (see step 3)
+
+### User not logged in after Zitadel redirect
+- Check that "Skip registration form" is checked in Django admin
+- Ensure `SOCIAL_AUTH_AUTO_CREATE_USERS = True` in settings
+- Check Zitadel is returning proper user info (email, name)
+
+### "Invalid client" error from Zitadel
+- Client ID must include @projectname suffix
+- Client secret must match exactly
+- Redirect URLs must be exact match (including protocol and port)
+
+### Session not persisting
+- Clear browser cookies
+- Check SESSION_COOKIE_DOMAIN is appropriate for your setup
+- Ensure cookies are not blocked by browser
+
+## Testing User Creation
+
+After successful Zitadel login, check if user was created:
+
+```bash
+tutor local exec lms ./manage.py lms shell
+>>> from social_django.models import UserSocialAuth
+>>> UserSocialAuth.objects.all()
+# Should show your SSO users
+
+>>> from django.contrib.auth import get_user_model
+>>> User = get_user_model()
+>>> User.objects.filter(email='your-email@example.com')
+# Should show the created user
 ```
