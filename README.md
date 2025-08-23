@@ -1,6 +1,13 @@
-# Zitadel HTTP SMS Provider Integration
+# Zitadel SMS Provider Integration
 
-This repository provides a complete solution for integrating HTTP-based SMS providers with Zitadel v2.42.0. It includes a webhook server, configuration scripts, and deployment tools.
+This repository provides solutions for integrating SMS providers with Zitadel.
+
+## ⚠️ IMPORTANT: Version Compatibility
+
+- **Zitadel v2.42.0**: Only supports Twilio natively (use our proxy solution for other providers)
+- **Zitadel v2.55.1+**: Supports HTTP SMS providers directly
+
+**If you're using v2.42.0, please see [zitadel-sms-provider-v2.42.0-solution.md](./zitadel-sms-provider-v2.42.0-solution.md) for specific instructions.**
 
 ## 📋 Table of Contents
 
@@ -17,7 +24,17 @@ This repository provides a complete solution for integrating HTTP-based SMS prov
 
 ## 🎯 Overview
 
-Zitadel v2.42.0 supports HTTP/webhook-based SMS providers, allowing you to integrate any SMS service that has an HTTP API. This solution provides:
+This repository provides multiple solutions for SMS integration with Zitadel:
+
+### For Zitadel v2.42.0
+- Twilio proxy solution to use non-Twilio SMS providers
+- Configuration guides for native Twilio support
+
+### For Zitadel v2.55.1+
+- Direct HTTP SMS provider integration
+- Webhook server for custom SMS providers
+
+This solution provides:
 
 - 🔌 Ready-to-use webhook server with support for multiple SMS providers
 - 🛠️ Configuration scripts for easy Zitadel setup
