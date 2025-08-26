@@ -111,6 +111,38 @@ SOCIAL_AUTH_AUTO_CREATE_USERS = True
 FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
 
+# Create custom pipeline module
+import sys
+from types import ModuleType
+
+# Custom pipeline step to ensure proper login
+def ensure_user_login(backend, user, response, *args, **kwargs):
+    '''Custom pipeline step to ensure user is properly logged in'''
+    if user and backend:
+        from django.contrib.auth import login
+        # Get the request from the strategy
+        request = backend.strategy.request
+        if request and user.is_active:
+            # Ensure user backend is set
+            user.backend = 'django.contrib.auth.backends.ModelBackend'
+            # Force login
+            login(request, user)
+            # Force session save
+            request.session.save()
+            request.session.modified = True
+            # Log the successful login
+            import logging
+            logger = logging.getLogger('lms.djangoapps.sso_redirect')
+            logger.info(f"SSO Login: Successfully logged in user {user.username} (ID: {user.id})")
+    return {}
+
+# Create a module to hold the pipeline function
+pipeline_module = ModuleType('lms.djangoapps.sso_pipeline')
+pipeline_module.ensure_user_login = ensure_user_login
+
+# Add to sys.modules
+sys.modules['lms.djangoapps.sso_pipeline'] = pipeline_module
+
 # User creation pipeline - Use standard social_core pipeline with session creation
 SOCIAL_AUTH_PIPELINE = (
     # Get the information we can about the user and return it
@@ -138,6 +170,9 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
     
+    # Our custom login step
+    'lms.djangoapps.sso_pipeline.ensure_user_login',
+    
     # Force login - this should create the session
     'social_django.pipeline.login_user',
 )
@@ -145,10 +180,11 @@ SOCIAL_AUTH_PIPELINE = (
 # Session and cookie settings for SSO
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 14 days
-SESSION_SAVE_EVERY_REQUEST = False
-SESSION_COOKIE_DOMAIN = ""  # Set to empty to work with all subdomains
+SESSION_SAVE_EVERY_REQUEST = True  # Changed to True to ensure session is saved
+SESSION_COOKIE_DOMAIN = None  # Changed to None for better compatibility
 SESSION_COOKIE_HTTPONLY = True
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
 # Ensure login redirect works
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
@@ -157,6 +193,13 @@ LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/dashboard'
 SOCIAL_AUTH_INACTIVE_USER_URL = '/dashboard'
+
+# Additional session security settings
+SOCIAL_AUTH_SESSION_EXPIRATION = False
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = False  # Set to True if using HTTPS
+
+# Force session to be created on login
+SOCIAL_AUTH_ALWAYS_ASSOCIATE = True
 
 # Username generation from email
 SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL = True
@@ -342,6 +385,17 @@ FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
 # Session settings for production
 SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
 SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
+# Ensure social auth redirects work properly
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
+SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/dashboard'
+
+# Additional security for production
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = False  # Set to True if using HTTPS
+SOCIAL_AUTH_FIELDS_STORED_IN_SESSION = ['next']
 """),
 ])
 
