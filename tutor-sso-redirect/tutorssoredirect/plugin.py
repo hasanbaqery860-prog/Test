@@ -130,15 +130,52 @@ def ensure_user_login(backend, user, response, *args, **kwargs):
             # Force session save
             request.session.save()
             request.session.modified = True
+            # Set session expiry
+            request.session.set_expiry(settings.SESSION_COOKIE_AGE)
             # Log the successful login
             import logging
             logger = logging.getLogger('lms.djangoapps.sso_redirect')
             logger.info(f"SSO Login: Successfully logged in user {user.username} (ID: {user.id})")
     return {}
 
+# Enhanced login completion function
+def complete_social_login(backend, user, response, request, *args, **kwargs):
+    '''Enhanced login completion to ensure session persistence'''
+    if user and request:
+        from django.contrib.auth import login
+        import logging
+        logger = logging.getLogger('lms.djangoapps.sso_redirect')
+        
+        try:
+            # Set the authentication backend
+            user.backend = 'django.contrib.auth.backends.ModelBackend'
+            
+            # Perform the login
+            login(request, user)
+            
+            # Ensure session is created and saved
+            if not request.session.session_key:
+                request.session.create()
+            
+            # Force session save with explicit flags
+            request.session.modified = True
+            request.session.save(force_insert=True)
+            
+            # Set session cookie explicitly
+            request.session.set_expiry(settings.SESSION_COOKIE_AGE)
+            
+            logger.info(f"SSO: User {user.username} logged in successfully, session key: {request.session.session_key}")
+            
+        except Exception as e:
+            logger.error(f"SSO: Error during login completion: {str(e)}")
+            raise
+    
+    return {}
+
 # Create a module to hold the pipeline function
 pipeline_module = ModuleType('lms.djangoapps.sso_pipeline')
 pipeline_module.ensure_user_login = ensure_user_login
+pipeline_module.complete_social_login = complete_social_login
 
 # Add to sys.modules
 sys.modules['lms.djangoapps.sso_pipeline'] = pipeline_module
@@ -170,11 +207,9 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
     
-    # Our custom login step
+    # Our custom login steps
     'lms.djangoapps.sso_pipeline.ensure_user_login',
-    
-    # Force login - this should create the session
-    'social_django.pipeline.login_user',
+    'lms.djangoapps.sso_pipeline.complete_social_login',
 )
 
 # Session and cookie settings for SSO
@@ -185,6 +220,8 @@ SESSION_COOKIE_DOMAIN = None  # Changed to None for better compatibility
 SESSION_COOKIE_HTTPONLY = True
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False  # Set to True only if using HTTPS
 
 # Ensure login redirect works
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
@@ -205,6 +242,12 @@ SOCIAL_AUTH_ALWAYS_ASSOCIATE = True
 SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL = True
 SOCIAL_AUTH_PROTECTED_USER_FIELDS = ['email', 'first_name', 'last_name']
 SOCIAL_AUTH_SANITIZE_REDIRECTS = False
+
+# Store authentication state in session
+SOCIAL_AUTH_FIELDS_STORED_IN_SESSION = ['next', 'auth_entry', 'redirect_state']
+
+# Ensure proper OIDC response mode
+SOCIAL_AUTH_OIDC_RESPONSE_MODE = 'query'
 
 # Force login through social auth
 SOCIAL_AUTH_FORCE_POST_DISCONNECT = False
@@ -351,6 +394,108 @@ LOGGING['loggers']['common.djangoapps.third_party_auth'] = {
     'level': 'DEBUG',
     'propagate': False,
 }
+"""),
+])
+
+# Add initialization hook to configure OIDC provider on startup
+hooks.Filters.ENV_PATCHES.add_items([
+    ("openedx-lms-common-settings", """
+# Auto-configure OIDC provider on startup
+def configure_oidc_on_startup():
+    '''Automatically configure OIDC provider in database on startup'''
+    try:
+        from common.djangoapps.third_party_auth.models import OAuth2ProviderConfig
+        from django.contrib.sites.models import Site
+        import json
+        import logging
+        
+        logger = logging.getLogger('lms.djangoapps.sso_redirect')
+        
+        # Only run if we have OIDC settings
+        if not all([
+            globals().get('SOCIAL_AUTH_OIDC_KEY'),
+            globals().get('SOCIAL_AUTH_OIDC_SECRET'),
+            globals().get('SOCIAL_AUTH_OIDC_OIDC_ENDPOINT')
+        ]):
+            logger.info("SSO: Skipping OIDC auto-configuration - missing settings")
+            return
+        
+        # Get the site
+        site = Site.objects.first()
+        if not site:
+            logger.error("SSO: No site configured, cannot auto-configure OIDC")
+            return
+        
+        # Check if provider exists
+        provider_exists = OAuth2ProviderConfig.objects.filter(slug='oidc').exists()
+        
+        # Create or update the provider
+        provider, created = OAuth2ProviderConfig.objects.update_or_create(
+            slug='oidc',
+            defaults={
+                'enabled': True,
+                'name': 'oidc',
+                'site': site,
+                'skip_registration_form': True,
+                'skip_email_verification': True,
+                'send_welcome_email': False,
+                'visible': True,
+                'enable_sso_id_verification': False,
+                'backend_name': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
+                'key': globals().get('SOCIAL_AUTH_OIDC_KEY'),
+                'secret': globals().get('SOCIAL_AUTH_OIDC_SECRET'),
+                'other_settings': json.dumps({
+                    "OIDC_ENDPOINT": globals().get('SOCIAL_AUTH_OIDC_OIDC_ENDPOINT', '').rstrip('/')
+                })
+            }
+        )
+        
+        if created:
+            logger.info("SSO: Successfully created OIDC provider configuration")
+        elif not provider_exists:
+            logger.info("SSO: Successfully updated OIDC provider configuration")
+        
+    except Exception as e:
+        import logging
+        logger = logging.getLogger('lms.djangoapps.sso_redirect')
+        logger.error(f"SSO: Failed to auto-configure OIDC provider: {str(e)}")
+
+# Schedule the configuration to run after Django is ready
+try:
+    from django.apps import AppConfig
+    from django.db.models.signals import post_migrate
+    
+    class SSOAutoConfigApp(AppConfig):
+        name = 'lms.djangoapps.sso_autoconfig'
+        verbose_name = 'SSO Auto Configuration'
+        
+        def ready(self):
+            # Run configuration after migrations
+            post_migrate.connect(self.configure_oidc, sender=self)
+        
+        def configure_oidc(self, **kwargs):
+            configure_oidc_on_startup()
+    
+    # Register the app
+    import sys
+    from types import ModuleType
+    
+    # Create the module
+    autoconfig_module = ModuleType('lms.djangoapps.sso_autoconfig')
+    autoconfig_module.default_app_config = 'lms.djangoapps.sso_autoconfig.SSOAutoConfigApp'
+    autoconfig_module.SSOAutoConfigApp = SSOAutoConfigApp
+    
+    # Add to sys.modules
+    sys.modules['lms.djangoapps.sso_autoconfig'] = autoconfig_module
+    
+    # Add to installed apps if not already there
+    if 'lms.djangoapps.sso_autoconfig' not in INSTALLED_APPS:
+        INSTALLED_APPS.append('lms.djangoapps.sso_autoconfig')
+    
+except Exception as e:
+    import logging
+    logger = logging.getLogger('lms.djangoapps.sso_redirect')
+    logger.error(f"SSO: Failed to register auto-config app: {str(e)}")
 """),
 ])
 
