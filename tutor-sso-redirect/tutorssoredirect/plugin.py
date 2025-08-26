@@ -22,7 +22,7 @@ hooks.Filters.CONFIG_DEFAULTS.add_items([
     ("SSO_OIDC_KEY", ""),  # Client ID from Zitadel
     ("SSO_OIDC_SECRET", ""),  # Client Secret from Zitadel
     ("SSO_OIDC_ENDPOINT", ""),  # Zitadel OIDC endpoint
-])
+]),
 
 ########################################
 # PATCHES
@@ -145,10 +145,23 @@ SOCIAL_AUTH_PIPELINE = (
 # Session and cookie settings for SSO
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 14 days
-SESSION_SAVE_EVERY_REQUEST = False
-SESSION_COOKIE_DOMAIN = ""  # Set to empty to work with all subdomains
+SESSION_SAVE_EVERY_REQUEST = True  # Force session save on every request
+SESSION_COOKIE_DOMAIN = None  # Set to None to work with IP addresses and all domains
 SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
+SESSION_COOKIE_SAMESITE = 'Lax'  # Allow cross-site requests for SSO
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
+# Ensure session middleware is properly configured
+MIDDLEWARE = [
+    'lms.djangoapps.sso_redirect.EnhancedSessionMiddleware',  # Use our enhanced session middleware
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'social_django.middleware.SocialAuthExceptionMiddleware',
+] + [m for m in MIDDLEWARE if 'SessionMiddleware' not in m and 'EnhancedSessionMiddleware' not in m]
 
 # Ensure login redirect works
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
@@ -171,9 +184,47 @@ from django.conf import settings
 from django.shortcuts import redirect
 from django.utils.deprecation import MiddlewareMixin
 from django.http import HttpResponsePermanentRedirect
+from django.contrib.sessions.middleware import SessionMiddleware
 import logging
 
 logger = logging.getLogger(__name__)
+
+class EnhancedSessionMiddleware(SessionMiddleware):
+    """Enhanced session middleware that works with IP addresses"""
+    
+    def process_request(self, request):
+        # Call parent method
+        super().process_request(request)
+        
+        # Ensure session is created for IP-based access
+        if not hasattr(request, 'session') or not request.session:
+            request.session = self.SessionStore()
+            request.session.create()
+        
+        # Set session expiry
+        if hasattr(request, 'session') and request.session:
+            request.session.set_expiry(settings.SESSION_COOKIE_AGE)
+    
+    def process_response(self, request, response):
+        # Call parent method
+        response = super().process_response(request, response)
+        
+        # Ensure session cookie is set properly for IP access
+        if hasattr(request, 'session') and request.session and request.session.modified:
+            host = request.get_host()
+            if host.replace(':', '').replace('.', '').isdigit():
+                # This is an IP address, set cookie without domain restriction
+                response.set_cookie(
+                    settings.SESSION_COOKIE_NAME,
+                    request.session.session_key,
+                    max_age=settings.SESSION_COOKIE_AGE,
+                    domain=None,  # No domain restriction for IP access
+                    secure=settings.SESSION_COOKIE_SECURE,
+                    httponly=settings.SESSION_COOKIE_HTTPONLY,
+                    samesite=settings.SESSION_COOKIE_SAMESITE
+                )
+        
+        return response
 
 class SSORedirectMiddleware(MiddlewareMixin):
     '''Middleware to redirect authentication requests to SSO'''
@@ -187,6 +238,13 @@ class SSORedirectMiddleware(MiddlewareMixin):
         # Skip if user is already authenticated
         if hasattr(request, 'user') and request.user.is_authenticated:
             return None
+            
+        # Fix session cookie domain for IP-based access
+        if hasattr(request, 'session') and request.session:
+            # If accessing via IP, ensure session cookie works
+            if request.get_host().replace(':', '').replace('.', '').isdigit():
+                # This is an IP address, ensure session works
+                request.session.set_expiry(settings.SESSION_COOKIE_AGE)
             
         # List of auth-related URLs to intercept
         auth_patterns = [
@@ -242,6 +300,25 @@ class SSORedirectMiddleware(MiddlewareMixin):
             return HttpResponsePermanentRedirect(redirect_url)
         
         return None
+    
+    def process_response(self, request, response):
+        """Fix session cookies for IP-based access"""
+        if hasattr(request, 'session') and request.session:
+            # If accessing via IP address, ensure session cookie is set properly
+            host = request.get_host()
+            if host.replace(':', '').replace('.', '').isdigit():
+                # This is an IP address, set session cookie without domain restriction
+                if hasattr(response, 'set_cookie'):
+                    response.set_cookie(
+                        settings.SESSION_COOKIE_NAME,
+                        request.session.session_key,
+                        max_age=settings.SESSION_COOKIE_AGE,
+                        domain=None,  # No domain restriction for IP access
+                        secure=settings.SESSION_COOKIE_SECURE,
+                        httponly=settings.SESSION_COOKIE_HTTPONLY,
+                        samesite=settings.SESSION_COOKIE_SAMESITE
+                    )
+        return response
 
 # Create a module to hold the middleware
 import sys
@@ -250,12 +327,13 @@ from types import ModuleType
 # Create the module
 sso_redirect_module = ModuleType('lms.djangoapps.sso_redirect')
 sso_redirect_module.SSORedirectMiddleware = SSORedirectMiddleware
+sso_redirect_module.EnhancedSessionMiddleware = EnhancedSessionMiddleware
 
 # Add to sys.modules
 sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
 # Insert middleware at the BEGINNING of the stack
-MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
+MIDDLEWARE = ['lms.djangoapps.sso_redirect.EnhancedSessionMiddleware', 'lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 
 # Disable password reset
 FEATURES['ENABLE_PASSWORD_RESET'] = False
