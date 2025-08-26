@@ -22,7 +22,7 @@ hooks.Filters.CONFIG_DEFAULTS.add_items([
     ("SSO_OIDC_KEY", ""),  # Client ID from Zitadel
     ("SSO_OIDC_SECRET", ""),  # Client Secret from Zitadel
     ("SSO_OIDC_ENDPOINT", ""),  # Zitadel OIDC endpoint
-])
+]),
 
 ########################################
 # PATCHES
