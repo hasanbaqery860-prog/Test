@@ -74,6 +74,30 @@ AUTHN_REDIRECT_TO_OIDC = True
 AUTHN_DEFAULT_REDIRECT_URL = '/auth/login/oidc/'
 AUTHN_OIDC_PROVIDER_SLUG = 'oidc'
 
+# Skip showing login/signup forms completely
+AUTHN_MINIMAL_HEADER = True
+FEATURES['SKIP_EMAIL_VALIDATION'] = True
+FEATURES['AUTOMATIC_AUTH_FOR_TESTING'] = False
+
+# Hide all login form elements and force immediate redirect
+HIDE_USERNAME_EMAIL_FIELD = True
+HIDE_PASSWORD_FIELD = True
+THIRD_PARTY_AUTH_ONLY_PROMPT = True
+THIRD_PARTY_AUTH_ONLY_HINT = ""
+
+# Force immediate SSO redirect without showing any forms
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = False
+ALWAYS_REDIRECT_TO_THIRD_PARTY_AUTH = True
+
+# Disable local login completely
+FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
+FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
+FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = True
+
+# Auto-submit the SSO form
+AUTHN_PROGRESSIVE_PROFILING_SUPPORT = False
+SKIP_AUTHN_MFE_REDIRECT_TIMER = True
+
 # Additional OIDC settings
 SOCIAL_AUTH_OIDC_SCOPE = ['openid', 'profile', 'email']
 SOCIAL_AUTH_OIDC_ID_TOKEN_DECRYPTION_KEY = None
@@ -201,7 +225,8 @@ class SSORedirectMiddleware(MiddlewareMixin):
             '/register',
             '/signup',
             '/logistration',
-            '/authn',
+            # Don't intercept /authn to allow MFE to load first
+            # '/authn',
             '/user_api/v1/account/login_session',
             '/api/user/v1/account/login_session',
             '/create_account',
@@ -261,8 +286,8 @@ sso_redirect_module.SSORedirectMiddleware = SSORedirectMiddleware
 sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
 # Insert middleware at the BEGINNING of the stack
-# Middleware disabled to allow MFE flow
-# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
+# Enable middleware for immediate redirect
+MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 
 # Disable password reset
 FEATURES['ENABLE_PASSWORD_RESET'] = False
@@ -330,8 +355,8 @@ FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
 LOGIN_URL = '/login'
 
 # Insert middleware at the beginning for CMS too
-# Middleware disabled to allow MFE flow
-# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
+# Enable middleware for immediate redirect
+MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 """),
 ])
 
@@ -350,6 +375,17 @@ FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
 # Session settings for production
 SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
 SESSION_COOKIE_SAMESITE = 'Lax'
+"""),
+])
+
+# Add MFE patches for immediate redirect
+hooks.Filters.ENV_PATCHES.add_items([
+    ("mfe-env-production", """
+# Force immediate redirect to SSO in authn MFE
+AUTHN_REDIRECT_TO_OIDC=true
+DISABLE_ENTERPRISE_LOGIN=true
+ENABLE_PROGRESSIVE_PROFILING=false
+HIDE_REGISTRATION_FORM=true
 """),
 ])
 
