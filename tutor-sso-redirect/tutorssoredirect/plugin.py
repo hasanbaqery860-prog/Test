@@ -98,6 +98,32 @@ FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = True
 AUTHN_PROGRESSIVE_PROFILING_SUPPORT = False
 SKIP_AUTHN_MFE_REDIRECT_TIMER = True
 
+# CORS Configuration for login endpoints
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://91.107.146.137:8000",
+    "http://91.107.146.137:8001",
+    "http://91.107.146.137:1999",
+    "http://local.openedx.io:8000",
+    "http://local.openedx.io:8001",
+    "http://local.openedx.io:1999",
+    "http://apps.local.openedx.io:1999",
+]
+
+# Additional CORS headers for login refresh
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'use-jwt-cookie',
+]
+
 # Additional OIDC settings
 SOCIAL_AUTH_OIDC_SCOPE = ['openid', 'profile', 'email']
 SOCIAL_AUTH_OIDC_ID_TOKEN_DECRYPTION_KEY = None
@@ -196,6 +222,15 @@ SOCIAL_AUTH_SANITIZE_REDIRECTS = False
 # Force login through social auth
 SOCIAL_AUTH_FORCE_POST_DISCONNECT = False
 
+# Ensure login_refresh works properly
+LOGIN_REFRESH_REDIRECT_URL = '/dashboard'
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
+
+# JWT Cookie settings for login refresh
+JWT_AUTH_COOKIE_HEADER_PAYLOAD = 'edx-jwt-cookie-header-payload'
+JWT_AUTH_COOKIE_SIGNATURE = 'edx-jwt-cookie-signature'
+JWT_AUTH_REFRESH_COOKIE = 'edx-jwt-refresh-cookie'
+
 # Define the SSO redirect middleware inline
 from django.conf import settings
 from django.shortcuts import redirect
@@ -242,7 +277,20 @@ class SSORedirectMiddleware(MiddlewareMixin):
         
         if is_auth_url:
             # Skip if it's an API endpoint we need to keep
-            skip_patterns = ['/api/csrf/', '/static/', '/media/', '/admin/', '/oauth2/', '/auth/complete/', '/logout', '/auth/login/oidc/']
+            skip_patterns = [
+                '/api/csrf/', 
+                '/static/', 
+                '/media/', 
+                '/admin/', 
+                '/oauth2/', 
+                '/auth/complete/', 
+                '/logout', 
+                '/auth/login/oidc/',
+                '/login_refresh',  # Skip login refresh to avoid CORS issues
+                '/api/user/v2/account/login_session/',  # API endpoints
+                '/api/mobile/',
+                '/heartbeat',
+            ]
             if any(skip in path for skip in skip_patterns):
                 return None
             
