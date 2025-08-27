@@ -41,6 +41,20 @@ AUTHN_MICROFRONTEND_DOMAIN = 'apps.local.openedx.io:1999'
 ENABLE_AUTHN_MICROFRONTEND = True
 FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 
+# Configure MFE to show third-party auth
+AUTHN_MICROFRONTEND_THIRD_PARTY_AUTH_ENABLED = True
+AUTHN_MICROFRONTEND_THIRD_PARTY_AUTH_ONLY = True  # Only show third-party auth, hide username/password
+
+# Ensure MFE can communicate with LMS
+MFE_CONFIG = {
+    "BASE_URL": "http://apps.local.openedx.io:1999",
+    "LMS_BASE_URL": "http://91.107.146.137:8000",
+    "LOGIN_ISSUE_SUPPORT_LINK": "",
+    "ENABLE_THIRD_PARTY_AUTH": True,
+    "THIRD_PARTY_AUTH_ONLY": True,
+    "AUTHN_MINIMAL_HEADER": True,
+}
+
 # Disable all the login/register bullshit
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  # Actually ENABLE for SSO users
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
@@ -312,12 +326,13 @@ class SSORedirectMiddleware(MiddlewareMixin):
             if use_mfe:
                 # Redirect to MFE authn app
                 mfe_url = getattr(settings, 'SSO_MFE_URL', 'http://apps.local.openedx.io:1999')
-                redirect_url = f"{mfe_url}/authn/login"
+                redirect_url = f"{mfe_url}/authn/login?next=%2F"
                 
-                # Preserve next parameter
-                next_url = request.GET.get('next', request.get_full_path())
-                if next_url:
-                    redirect_url = f"{redirect_url}?next={next_url}"
+                # Preserve next parameter if provided
+                next_url = request.GET.get('next', '')
+                if next_url and next_url != '/':
+                    from urllib.parse import quote
+                    redirect_url = f"{mfe_url}/authn/login?next={quote(next_url, safe='')}"
                 
                 # Log the redirect
                 logger.info(f"SSO Redirect: INTERCEPTING {request.path} -> {redirect_url}")

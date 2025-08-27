@@ -14,12 +14,13 @@ content: |
       if use_mfe:
           # Redirect to MFE authn app
           mfe_url = getattr(settings, 'SSO_MFE_URL', 'http://apps.local.openedx.io:1999')
-          redirect_url = f"{mfe_url}/authn/login"
+          redirect_url = f"{mfe_url}/authn/login?next=%2F"
           
-          # Preserve next parameter
-          next_url = request.GET.get('next', request.get_full_path())
-          if next_url:
-              redirect_url = f"{redirect_url}?next={next_url}"
+          # Preserve next parameter if provided
+          next_url = request.GET.get('next', '')
+          if next_url and next_url != '/':
+              from urllib.parse import quote
+              redirect_url = f"{mfe_url}/authn/login?next={quote(next_url, safe='')}"
       else:
           # Direct SSO redirect
           sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
