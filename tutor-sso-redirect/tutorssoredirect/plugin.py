@@ -33,11 +33,11 @@ hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # SSO Redirect Plugin Settings - Enable MFE with auto-redirect to SSO
 
-# DISABLE the authn MFE - go directly to SSO
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
-FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+# Enable the authn MFE
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+ENABLE_AUTHN_MICROFRONTEND = True
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 
 # Disable all the login/register bullshit
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  # Actually ENABLE for SSO users
@@ -217,8 +217,8 @@ SESSION_COOKIE_DOMAIN = ""  # Set to empty to work with all subdomains
 SESSION_COOKIE_HTTPONLY = True
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
-# Ensure login redirect goes directly to SSO
-LOGIN_URL = '/auth/login/oidc/'
+# Ensure login redirect goes to MFE first
+LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -345,8 +345,8 @@ sso_redirect_module.SSORedirectMiddleware = SSORedirectMiddleware
 sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
 # Insert middleware at the BEGINNING of the stack
-# Enable middleware for immediate redirect
-MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
+# Disable middleware to allow MFE flow
+# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 
 # Disable password reset
 FEATURES['ENABLE_PASSWORD_RESET'] = False
@@ -367,9 +367,9 @@ SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 # Disable enterprise login
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
 
-# Disable MFE URL pattern - go directly to SSO
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
+# Enable MFE URL pattern for legacy to redirect to MFE
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
 
 # Override account MFE settings too
 ACCOUNT_MICROFRONTEND_URL = None
@@ -410,22 +410,22 @@ FEATURES['DISABLE_STUDIO_SSO_OVER_LMS'] = False
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
 
-# Redirect CMS login directly to SSO
-LOGIN_URL = '/auth/login/oidc/'
+# Redirect CMS login to MFE first
+LOGIN_URL = '/login'
 
 # Insert middleware at the beginning for CMS too
-# Enable middleware for immediate redirect
-MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
+# Disable middleware to allow MFE flow
+# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 """),
 ])
 
-# Production settings to ensure MFE is disabled
+# Production settings to ensure MFE is enabled
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-production-settings", """
-# Disable MFE FOR AUTH - go directly to SSO
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
+# Enable MFE FOR AUTH
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+ENABLE_AUTHN_MICROFRONTEND = True
 
 # Ensure third-party auth is enabled in production
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
@@ -437,50 +437,29 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 """),
 ])
 
-# Add custom JavaScript for immediate redirect
+# Configure MFE to show SSO button prominently
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
-# JavaScript to force immediate SSO redirect
-AUTHN_CUSTOM_JS_FOOTER = '''
-<script>
-(function() {
-    // Force immediate redirect to SSO if on authn pages
-    if (window.location.pathname.includes('/authn/') || 
-        window.location.pathname.includes('/login') ||
-        window.location.pathname.includes('/register')) {
-        
-        // Check if we have tpa_hint or should redirect
-        const urlParams = new URLSearchParams(window.location.search);
-        const tpaHint = urlParams.get('tpa_hint');
-        
-        if (tpaHint === 'oidc' || !window.location.href.includes('/auth/login/oidc/')) {
-            // Find and click the SSO button immediately
-            setTimeout(function() {
-                const ssoButton = document.querySelector('[data-provider-id="oidc"]') || 
-                                 document.querySelector('a[href*="/auth/login/oidc/"]') ||
-                                 document.querySelector('button[class*="oidc"]');
-                if (ssoButton) {
-                    ssoButton.click();
-                } else {
-                    // Direct redirect if no button found
-                    window.location.href = '/auth/login/oidc/?next=' + encodeURIComponent(urlParams.get('next') || '/dashboard');
-                }
-            }, 100);
-        }
-    }
-})();
-</script>
-'''
+# Configure SSO button to be prominent in MFE
+THIRD_PARTY_AUTH_ONLY_PROMPT = "Please sign in with your organization's account"
+THIRD_PARTY_AUTH_PROVIDERS = [{
+    'backend_name': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
+    'name': 'oidc',
+    'display_name': 'Sign in with Zitadel',
+    'visible': True,
+    'icon_class': 'fa-sign-in',
+    'login_url': '/auth/login/oidc/',
+}]
 """),
 ])
 
 # Development settings
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-development-settings", """
-# Disable MFE FOR AUTH IN DEV - go directly to SSO
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
+# Enable MFE FOR AUTH IN DEV
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+ENABLE_AUTHN_MICROFRONTEND = True
 
 # Ensure third-party auth is enabled in dev
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
