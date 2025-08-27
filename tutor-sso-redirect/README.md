@@ -1,13 +1,13 @@
 # Tutor SSO Redirect Plugin
 
-This plugin configures Open edX to redirect to the MFE authentication page first, which then automatically redirects to your SSO provider (Zitadel).
+This plugin configures Open edX to redirect directly to your SSO provider (Zitadel), completely bypassing all login/signup forms.
 
 ## What This Fixes
 
-- **Legacy Open edX** (localhost:8000) redirects to MFE for login
-- **MFE** automatically redirects to SSO (Zitadel)
-- Maintains proper authentication flow: Legacy → MFE → SSO
-- Auto-redirect from MFE to SSO provider
+- **All login/register URLs** redirect directly to SSO (Zitadel)
+- **No login forms shown** - immediate redirect to Zitadel
+- **Bypasses MFE completely** - goes straight to SSO
+- **No intermediate pages** - users never see Open edX auth pages
 - Fixes "Can't fetch setting of a disabled backend/provider" error
 
 ## Quick Installation
@@ -53,17 +53,15 @@ See [ZITADEL_SETUP.md](ZITADEL_SETUP.md) for detailed Zitadel configuration.
 
 ## How It Works
 
-1. **Enables authn MFE** with proper configuration:
-   - `AUTHN_MICROFRONTEND_URL = "http://apps.local.openedx.io:1999/authn"`
-   - `ENABLE_AUTHN_MICROFRONTEND = True`
+1. **Disables authn MFE** completely:
+   - `AUTHN_MICROFRONTEND_URL = None`
+   - `ENABLE_AUTHN_MICROFRONTEND = False`
 
-2. **Enables OIDC backend** with proper authentication settings
+2. **URL Overrides** that intercept all auth URLs and redirect to SSO
 
-3. **Auto-redirect from MFE to SSO** using:
-   - `AUTHN_REDIRECT_TO_OIDC = True`
-   - `AUTHN_DEFAULT_REDIRECT_URL = '/auth/login/oidc/'`
+3. **Aggressive Middleware** that catches any login/register attempts
 
-4. **Proper authentication flow**: Legacy → MFE → Zitadel
+4. **Direct authentication flow**: Any login URL → Zitadel (no intermediate pages)
 
 ## Testing
 

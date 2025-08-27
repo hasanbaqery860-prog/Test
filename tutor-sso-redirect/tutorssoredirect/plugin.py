@@ -33,11 +33,11 @@ hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # SSO Redirect Plugin Settings - Enable MFE with auto-redirect to SSO
 
-# Enable the authn MFE
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
-FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
+# DISABLE the authn MFE - go directly to SSO
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
 
 # Disable all the login/register bullshit
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  # Actually ENABLE for SSO users
@@ -217,8 +217,8 @@ SESSION_COOKIE_DOMAIN = ""  # Set to empty to work with all subdomains
 SESSION_COOKIE_HTTPONLY = True
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
-# Ensure login redirect goes to MFE first
-LOGIN_URL = '/login'
+# Ensure login redirect goes directly to SSO
+LOGIN_URL = '/auth/login/oidc/'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -271,12 +271,12 @@ class SSORedirectMiddleware(MiddlewareMixin):
             '/register',
             '/signup',
             '/logistration',
-            # Don't intercept /authn to allow MFE to load first
-            # '/authn',
+            '/authn',  # Intercept MFE URLs too
             '/user_api/v1/account/login_session',
             '/api/user/v1/account/login_session',
             '/create_account',
             '/ui/login',
+            '/account',  # Account pages
         ]
         
         # Check if this is an auth URL
@@ -367,9 +367,9 @@ SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 # Disable enterprise login
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
 
-# Enable MFE URL pattern for legacy to redirect to MFE
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+# Disable MFE URL pattern - go directly to SSO
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
 
 # Override account MFE settings too
 ACCOUNT_MICROFRONTEND_URL = None
@@ -410,8 +410,8 @@ FEATURES['DISABLE_STUDIO_SSO_OVER_LMS'] = False
 FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
 
-# Redirect CMS login to MFE first
-LOGIN_URL = '/login'
+# Redirect CMS login directly to SSO
+LOGIN_URL = '/auth/login/oidc/'
 
 # Insert middleware at the beginning for CMS too
 # Enable middleware for immediate redirect
@@ -422,10 +422,10 @@ MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 # Production settings to ensure MFE is disabled
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-production-settings", """
-# Enable MFE FOR AUTH
-AUTHN_MICROFRONTEND_URL = "http://apps.local.openedx.io:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "apps.local.openedx.io:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
+# Disable MFE FOR AUTH - go directly to SSO
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
 
 # Ensure third-party auth is enabled in production
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
@@ -477,10 +477,10 @@ AUTHN_CUSTOM_JS_FOOTER = '''
 # Development settings
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-development-settings", """
-# Enable MFE FOR AUTH IN DEV
-AUTHN_MICROFRONTEND_URL = "http://apps.local.openedx.io:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "apps.local.openedx.io:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
+# Disable MFE FOR AUTH IN DEV - go directly to SSO
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
 
 # Ensure third-party auth is enabled in dev
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
