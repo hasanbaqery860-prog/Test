@@ -1,13 +1,16 @@
 # Tutor SSO Redirect Plugin
 
-This plugin forces BOTH legacy Open edX (localhost:8000) and MFE (apps.local.openedx.io:1999) to redirect directly to your SSO provider (Zitadel), bypassing the authn MFE completely.
+This plugin provides flexible SSO integration for Open edX with Zitadel. It supports two modes:
+
+1. **MFE Mode (Default)**: Uses the Authentication MFE as an intermediary
+2. **Direct Mode**: Bypasses MFE and redirects directly to SSO
 
 ## What This Fixes
 
-- **Legacy Open edX** (localhost:8000) no longer redirects to MFE for login
-- **Both legacy and MFE** routes go directly to SSO
-- No more redirect loops between legacy → MFE → SSO
-- Complete bypass of authn MFE
+- **Proper MFE Integration**: Legacy Open edX redirects to MFE, which then handles SSO
+- **Flexible routing**: Choose between MFE flow or direct SSO redirect
+- **Session persistence**: Ensures users stay logged in after SSO authentication
+- **Auto-configuration**: Automatically configures OIDC provider in database
 - Fixes "Can't fetch setting of a disabled backend/provider" error
 
 ## Quick Installation
@@ -24,7 +27,15 @@ tutor config save --set SSO_OIDC_KEY="your-client-id@projectname"
 tutor config save --set SSO_OIDC_SECRET="your-client-secret"
 tutor config save --set SSO_OIDC_ENDPOINT="https://your-zitadel-instance.zitadel.cloud"
 
-# 4. Save and restart
+# 4. Choose authentication mode (optional, defaults to MFE mode)
+# For MFE mode (default):
+tutor config save --set SSO_USE_MFE=true
+tutor config save --set SSO_MFE_URL="http://apps.local.openedx.io:1999"
+
+# For direct SSO mode (bypass MFE):
+# tutor config save --set SSO_USE_MFE=false
+
+# 5. Save and restart
 tutor config save
 tutor local restart
 ```
@@ -53,15 +64,20 @@ See [ZITADEL_SETUP.md](ZITADEL_SETUP.md) for detailed Zitadel configuration.
 
 ## How It Works
 
-1. **Completely disables authn MFE** by setting:
+### MFE Mode (Default)
+1. User clicks login on LMS (http://91.107.146.137:8000/)
+2. Redirected to MFE (http://apps.local.openedx.io:1999/authn/login)
+3. MFE shows Zitadel login option
+4. User authenticates with Zitadel
+5. Returns to MFE, then redirected to LMS dashboard
+
+### Direct Mode
+1. **Disables authn MFE** by setting:
    - `AUTHN_MICROFRONTEND_URL = None`
    - `ENABLE_AUTHN_MICROFRONTEND = False`
-
-2. **Enables OIDC backend** with proper authentication settings
-
-3. **Aggressive middleware** that intercepts ALL login/register URLs and redirects to SSO
-
-4. **URL overrides** that catch requests before they can redirect to MFE
+2. **Aggressive middleware** intercepts ALL login/register URLs
+3. **Direct redirect** to Zitadel SSO
+4. Returns directly to LMS after authentication
 
 ## Testing
 

@@ -17,7 +17,9 @@ from .__about__ import __version__
 hooks.Filters.CONFIG_DEFAULTS.add_items([
     # Plugin settings
     ("SSO_REDIRECT_ENABLED", True),
-    ("SSO_REDIRECT_URL", "/auth/login/oidc/"),  # Default SSO URL
+    ("SSO_USE_MFE", True),  # Use MFE for authentication
+    ("SSO_MFE_URL", "http://apps.local.openedx.io:1999"),  # MFE URL
+    ("SSO_REDIRECT_URL", "/auth/login/oidc/"),  # Backend SSO URL
     # OIDC Provider settings
     ("SSO_OIDC_KEY", ""),  # Client ID from Zitadel
     ("SSO_OIDC_SECRET", ""),  # Client Secret from Zitadel
@@ -31,13 +33,13 @@ hooks.Filters.CONFIG_DEFAULTS.add_items([
 # Add patches to openedx-lms-common-settings
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
-# SSO Redirect Plugin Settings - FUCK THE MFE, WE'RE GOING DIRECT TO SSO
+# SSO Redirect Plugin Settings - Work with MFE for Zitadel authentication
 
-# COMPLETELY DISABLE THE FUCKING AUTHN MFE
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
-FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+# Enable the authn MFE
+AUTHN_MICROFRONTEND_URL = '{{ SSO_MFE_URL }}'
+AUTHN_MICROFRONTEND_DOMAIN = 'apps.local.openedx.io:1999'
+ENABLE_AUTHN_MICROFRONTEND = True
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 
 # Disable all the login/register bullshit
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  # Actually ENABLE for SSO users
@@ -224,7 +226,11 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = False  # Set to True only if using HTTPS
 
 # Ensure login redirect works
+{% if SSO_USE_MFE %}
+LOGIN_URL = '{{ SSO_MFE_URL }}/authn/login'
+{% else %}
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
+{% endif %}
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -262,7 +268,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class SSORedirectMiddleware(MiddlewareMixin):
-    '''Middleware to redirect authentication requests to SSO'''
+    '''Middleware to redirect authentication requests to MFE'''
     
     def process_request(self, request):
         if not getattr(settings, 'SSO_REDIRECT_ENABLED', True):
@@ -281,7 +287,6 @@ class SSORedirectMiddleware(MiddlewareMixin):
             '/register',
             '/signup',
             '/logistration',
-            '/authn',
             '/user_api/v1/account/login_session',
             '/api/user/v1/account/login_session',
             '/create_account',
@@ -296,36 +301,55 @@ class SSORedirectMiddleware(MiddlewareMixin):
                 break
         
         if is_auth_url:
-            # Skip if it's an API endpoint we need to keep
-            skip_patterns = ['/api/csrf/', '/static/', '/media/', '/admin/', '/oauth2/', '/auth/complete/', '/logout', '/auth/login/oidc/']
+            # Skip if it's an API endpoint we need to keep or MFE URLs
+            skip_patterns = ['/api/csrf/', '/static/', '/media/', '/admin/', '/oauth2/', '/auth/complete/', '/logout', '/auth/login/oidc/', '/authn/']
             if any(skip in path for skip in skip_patterns):
                 return None
             
-            # Get the full SSO URL
-            sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+            # Check if we should use MFE
+            use_mfe = getattr(settings, 'SSO_USE_MFE', True)
             
-            # Make it absolute if it's relative
-            if sso_url.startswith('/'):
-                protocol = 'https' if request.is_secure() else 'http'
-                host = request.get_host()
-                sso_url = f"{protocol}://{host}{sso_url}"
-            
-            # Check if this is already the SSO URL
-            if request.build_absolute_uri().startswith(sso_url):
-                return None
-            
-            # Log the redirect
-            logger.info(f"SSO Redirect: INTERCEPTING {request.path} -> {sso_url}")
-            
-            # Preserve next parameter
-            next_url = request.GET.get('next', '')
-            if next_url:
-                redirect_url = f"{sso_url}?next={next_url}"
+            if use_mfe:
+                # Redirect to MFE authn app
+                mfe_url = getattr(settings, 'SSO_MFE_URL', 'http://apps.local.openedx.io:1999')
+                redirect_url = f"{mfe_url}/authn/login"
+                
+                # Preserve next parameter
+                next_url = request.GET.get('next', request.get_full_path())
+                if next_url:
+                    redirect_url = f"{redirect_url}?next={next_url}"
+                
+                # Log the redirect
+                logger.info(f"SSO Redirect: INTERCEPTING {request.path} -> {redirect_url}")
+                
+                # Use permanent redirect
+                return HttpResponsePermanentRedirect(redirect_url)
             else:
-                redirect_url = sso_url
-            
-            # Use permanent redirect
-            return HttpResponsePermanentRedirect(redirect_url)
+                # Direct SSO redirect (old behavior)
+                sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+                
+                # Make it absolute if it's relative
+                if sso_url.startswith('/'):
+                    protocol = 'https' if request.is_secure() else 'http'
+                    host = request.get_host()
+                    sso_url = f"{protocol}://{host}{sso_url}"
+                
+                # Check if this is already the SSO URL
+                if request.build_absolute_uri().startswith(sso_url):
+                    return None
+                
+                # Log the redirect
+                logger.info(f"SSO Redirect: INTERCEPTING {request.path} -> {sso_url}")
+                
+                # Preserve next parameter
+                next_url = request.GET.get('next', '')
+                if next_url:
+                    redirect_url = f"{sso_url}?next={next_url}"
+                else:
+                    redirect_url = sso_url
+                
+                # Use permanent redirect
+                return HttpResponsePermanentRedirect(redirect_url)
         
         return None
 
@@ -515,13 +539,19 @@ MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 """),
 ])
 
-# Production settings to ensure MFE is disabled
+# Production settings to ensure MFE is configured correctly
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-production-settings", """
-# ABSOLUTELY NO MFE FOR AUTH
+# Configure MFE for authentication
+{% if SSO_USE_MFE %}
+AUTHN_MICROFRONTEND_URL = '{{ SSO_MFE_URL }}'
+AUTHN_MICROFRONTEND_DOMAIN = 'apps.local.openedx.io:1999'
+ENABLE_AUTHN_MICROFRONTEND = True
+{% else %}
 AUTHN_MICROFRONTEND_URL = None
 AUTHN_MICROFRONTEND_DOMAIN = None
 ENABLE_AUTHN_MICROFRONTEND = False
+{% endif %}
 
 # Ensure third-party auth is enabled in production
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
@@ -547,10 +577,16 @@ SOCIAL_AUTH_FIELDS_STORED_IN_SESSION = ['next']
 # Development settings
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-development-settings", """
-# ABSOLUTELY NO MFE FOR AUTH IN DEV
+# Configure MFE for authentication in dev
+{% if SSO_USE_MFE %}
+AUTHN_MICROFRONTEND_URL = '{{ SSO_MFE_URL }}'
+AUTHN_MICROFRONTEND_DOMAIN = 'apps.local.openedx.io:1999'
+ENABLE_AUTHN_MICROFRONTEND = True
+{% else %}
 AUTHN_MICROFRONTEND_URL = None
 AUTHN_MICROFRONTEND_DOMAIN = None
 ENABLE_AUTHN_MICROFRONTEND = False
+{% endif %}
 
 # Ensure third-party auth is enabled in dev
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True

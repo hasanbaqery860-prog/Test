@@ -6,23 +6,40 @@ content: |
   from django.conf import settings
   from django.http import HttpResponsePermanentRedirect
   
-  # Create a view that redirects to SSO
+  # Create a view that redirects to MFE or SSO based on configuration
   def sso_redirect_view(request):
-      """Redirect all auth requests DIRECTLY to SSO, NOT to MFE"""
-      sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+      """Redirect auth requests to MFE or directly to SSO based on settings"""
+      use_mfe = getattr(settings, 'SSO_USE_MFE', True)
       
-      # Make it absolute
-      if sso_url.startswith('/'):
-          protocol = 'https' if request.is_secure() else 'http'
-          host = request.get_host()
-          sso_url = f"{protocol}://{host}{sso_url}"
+      if use_mfe:
+          # Redirect to MFE authn app
+          mfe_url = getattr(settings, 'SSO_MFE_URL', 'http://apps.local.openedx.io:1999')
+          redirect_url = f"{mfe_url}/authn/login"
+          
+          # Preserve next parameter
+          next_url = request.GET.get('next', request.get_full_path())
+          if next_url:
+              redirect_url = f"{redirect_url}?next={next_url}"
+      else:
+          # Direct SSO redirect
+          sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+          
+          # Make it absolute
+          if sso_url.startswith('/'):
+              protocol = 'https' if request.is_secure() else 'http'
+              host = request.get_host()
+              sso_url = f"{protocol}://{host}{sso_url}"
+          
+          next_url = request.GET.get('next', '')
+          if next_url:
+              redirect_url = f"{sso_url}?next={next_url}"
+          else:
+              redirect_url = sso_url
       
-      next_url = request.GET.get('next', '')
-      if next_url:
-          return HttpResponsePermanentRedirect(f"{sso_url}?next={next_url}")
-      return HttpResponsePermanentRedirect(sso_url)
+      return HttpResponsePermanentRedirect(redirect_url)
   
-  # Override ALL authentication URLs - prepend to urlpatterns
+  # Only override non-MFE authentication URLs when using MFE
+  # This allows the MFE to handle its own routes
   auth_redirects = [
       # Legacy login/register URLs
       re_path(r'^login/?$', sso_redirect_view, name='signin_user'),
@@ -30,20 +47,14 @@ content: |
       re_path(r'^signin/?$', sso_redirect_view, name='login'),
       re_path(r'^signup/?$', sso_redirect_view, name='register'),
       
-      # API endpoints
+      # API endpoints (only redirect specific login session endpoints)
       re_path(r'^user_api/v1/account/login_session/?$', sso_redirect_view, name='login_session'),
       re_path(r'^api/user/v1/account/login_session/?$', sso_redirect_view, name='login_session_api'),
-      
-      # Authn MFE URLs - redirect these too!
-      re_path(r'^authn/.*$', sso_redirect_view, name='authn_redirect'),
       
       # Other auth URLs
       re_path(r'^auth/login/?$', sso_redirect_view, name='auth_login'),
       re_path(r'^create_account/?$', sso_redirect_view, name='create_account'),
       re_path(r'^ui/login.*$', sso_redirect_view, name='ui_login'),
-      
-      # Catch-all for any login-like URL
-      re_path(r'^.*(login|signin|register|signup).*$', sso_redirect_view, name='catch_all_auth'),
   ]
   
   # Prepend our redirects to catch them first
