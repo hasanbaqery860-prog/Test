@@ -1,4 +1,4 @@
-# Force immediate redirect to SSO in authn MFE
+# Force immediate redirect to SSO in authn MFE (development)
 AUTHN_REDIRECT_TO_OIDC=true
 DISABLE_ENTERPRISE_LOGIN=true
 ENABLE_PROGRESSIVE_PROFILING=false

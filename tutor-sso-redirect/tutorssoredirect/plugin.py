@@ -94,6 +94,17 @@ FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
 FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = True
 
+# Additional settings to force SSO-only auth
+THIRD_PARTY_AUTH_HINT = 'oidc'
+THIRD_PARTY_AUTH_ONLY_HINT = 'oidc'
+FEATURES['ENABLE_REQUIRE_THIRD_PARTY_AUTH'] = True
+SOCIAL_AUTH_RAISE_EXCEPTIONS = False
+
+# Hide all non-SSO auth options
+REGISTRATION_EXTRA_FIELDS = {}
+REGISTRATION_FIELD_ORDER = []
+FEATURES['ENABLE_ACCOUNT_ACTIVATION_REQUIREMENT'] = False
+
 # Auto-submit the SSO form
 AUTHN_PROGRESSIVE_PROFILING_SUPPORT = False
 SKIP_AUTHN_MFE_REDIRECT_TIMER = True
@@ -426,14 +437,40 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 """),
 ])
 
-# Add MFE patches for immediate redirect
+# Add custom JavaScript for immediate redirect
 hooks.Filters.ENV_PATCHES.add_items([
-    ("mfe-env-production", """
-# Force immediate redirect to SSO in authn MFE
-AUTHN_REDIRECT_TO_OIDC=true
-DISABLE_ENTERPRISE_LOGIN=true
-ENABLE_PROGRESSIVE_PROFILING=false
-HIDE_REGISTRATION_FORM=true
+    ("openedx-lms-common-settings", """
+# JavaScript to force immediate SSO redirect
+AUTHN_CUSTOM_JS_FOOTER = '''
+<script>
+(function() {
+    // Force immediate redirect to SSO if on authn pages
+    if (window.location.pathname.includes('/authn/') || 
+        window.location.pathname.includes('/login') ||
+        window.location.pathname.includes('/register')) {
+        
+        // Check if we have tpa_hint or should redirect
+        const urlParams = new URLSearchParams(window.location.search);
+        const tpaHint = urlParams.get('tpa_hint');
+        
+        if (tpaHint === 'oidc' || !window.location.href.includes('/auth/login/oidc/')) {
+            // Find and click the SSO button immediately
+            setTimeout(function() {
+                const ssoButton = document.querySelector('[data-provider-id="oidc"]') || 
+                                 document.querySelector('a[href*="/auth/login/oidc/"]') ||
+                                 document.querySelector('button[class*="oidc"]');
+                if (ssoButton) {
+                    ssoButton.click();
+                } else {
+                    // Direct redirect if no button found
+                    window.location.href = '/auth/login/oidc/?next=' + encodeURIComponent(urlParams.get('next') || '/dashboard');
+                }
+            }, 100);
+        }
+    }
+})();
+</script>
+'''
 """),
 ])
 
