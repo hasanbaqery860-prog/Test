@@ -1,0 +1,24 @@
+name: openedx-lms-final-overrides
+content: |
+  # Final overrides to ensure MFE is disabled when SSO_USE_MFE is false
+  from django.conf import settings
+  
+  # Check if we should disable MFE
+  if not getattr(settings, 'SSO_USE_MFE', True):
+      # Force disable all MFE settings
+      settings.FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+      settings.AUTHN_MICROFRONTEND_URL = None
+      settings.AUTHN_MICROFRONTEND_DOMAIN = None
+      settings.ENABLE_AUTHN_MICROFRONTEND = False
+      
+      # Override LOGIN_URL to ensure it doesn't point to MFE
+      settings.LOGIN_URL = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
+      
+      # Clear any MFE configuration
+      if hasattr(settings, 'MFE_CONFIG'):
+          settings.MFE_CONFIG = {}
+      
+      # Log the override
+      import logging
+      logger = logging.getLogger('lms.djangoapps.sso_redirect')
+      logger.info("SSO: Force disabled MFE authentication, using direct SSO")

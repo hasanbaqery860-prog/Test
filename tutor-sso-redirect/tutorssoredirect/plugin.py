@@ -33,9 +33,10 @@ hooks.Filters.CONFIG_DEFAULTS.add_items([
 # Add patches to openedx-lms-common-settings
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
-# SSO Redirect Plugin Settings - Work with MFE for Zitadel authentication
+# SSO Redirect Plugin Settings
 
-# Enable the authn MFE
+{% if SSO_USE_MFE %}
+# MFE Mode - Use Authentication MFE
 AUTHN_MICROFRONTEND_URL = '{{ SSO_MFE_URL }}'
 AUTHN_MICROFRONTEND_DOMAIN = 'apps.local.openedx.io:1999'
 ENABLE_AUTHN_MICROFRONTEND = True
@@ -43,9 +44,9 @@ FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 
 # Configure MFE to show third-party auth
 AUTHN_MICROFRONTEND_THIRD_PARTY_AUTH_ENABLED = True
-AUTHN_MICROFRONTEND_THIRD_PARTY_AUTH_ONLY = True  # Only show third-party auth, hide username/password
+AUTHN_MICROFRONTEND_THIRD_PARTY_AUTH_ONLY = True
 
-# Ensure MFE can communicate with LMS
+# MFE Configuration
 MFE_CONFIG = {
     "BASE_URL": "http://apps.local.openedx.io:1999",
     "LMS_BASE_URL": "http://91.107.146.137:8000",
@@ -54,6 +55,20 @@ MFE_CONFIG = {
     "THIRD_PARTY_AUTH_ONLY": True,
     "AUTHN_MINIMAL_HEADER": True,
 }
+{% else %}
+# Direct Mode - COMPLETELY DISABLE MFE
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+
+# Clear any MFE settings
+MFE_CONFIG = {}
+
+# Force disable all MFE features
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+AUTHN_MICROFRONTEND_URL = ''
+{% endif %}
 
 # Disable all the login/register bullshit
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  # Actually ENABLE for SSO users
@@ -471,10 +486,15 @@ hooks.Filters.ENV_PATCHES.add_items([
 AUTHN_MICROFRONTEND_URL = '{{ SSO_MFE_URL }}'
 AUTHN_MICROFRONTEND_DOMAIN = 'apps.local.openedx.io:1999'
 ENABLE_AUTHN_MICROFRONTEND = True
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 {% else %}
+# FORCE DISABLE MFE IN PRODUCTION
 AUTHN_MICROFRONTEND_URL = None
 AUTHN_MICROFRONTEND_DOMAIN = None
 ENABLE_AUTHN_MICROFRONTEND = False
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+# Override any possible MFE URL
+AUTHN_MICROFRONTEND_URL = ''
 {% endif %}
 
 # Ensure third-party auth is enabled in production
