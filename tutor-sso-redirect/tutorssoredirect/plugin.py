@@ -33,16 +33,16 @@ hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # SSO Redirect Plugin Settings - Enable MFE with auto-redirect to SSO
 
-# DISABLE the authn MFE completely
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
-FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+# Enable the authn MFE for normal login
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+ENABLE_AUTHN_MICROFRONTEND = True
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 
-# Disable all the login/register bullshit
-FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  # Actually ENABLE for SSO users
-FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
-FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True  # Allow SSO to create accounts
+# Enable both SSO and normal login
+FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  
+FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = True  # Allow normal login too
+FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
 FEATURES['SHOW_REGISTRATION_LINKS'] = False
 FEATURES['ENABLE_MKTG_SITE'] = False
 
@@ -79,25 +79,24 @@ AUTHN_MINIMAL_HEADER = True
 FEATURES['SKIP_EMAIL_VALIDATION'] = True
 FEATURES['AUTOMATIC_AUTH_FOR_TESTING'] = False
 
-# Hide all login form elements and force immediate redirect
-HIDE_USERNAME_EMAIL_FIELD = True
-HIDE_PASSWORD_FIELD = True
-THIRD_PARTY_AUTH_ONLY_PROMPT = True
-THIRD_PARTY_AUTH_ONLY_HINT = ""
+# Show login forms but also show SSO option
+HIDE_USERNAME_EMAIL_FIELD = False
+HIDE_PASSWORD_FIELD = False
+THIRD_PARTY_AUTH_ONLY_PROMPT = False
 
-# Force immediate SSO redirect without showing any forms
+# Allow both SSO and normal login
 SOCIAL_AUTH_REDIRECT_IS_HTTPS = False
-ALWAYS_REDIRECT_TO_THIRD_PARTY_AUTH = True
+ALWAYS_REDIRECT_TO_THIRD_PARTY_AUTH = False  # Don't force redirect
 
-# Disable local login completely
-FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
-FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
-FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = True
+# Enable both login methods
+FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = True
+FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
+FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = False  # Allow normal login too
 
-# Additional settings to force SSO-only auth
+# Additional settings for SSO
 THIRD_PARTY_AUTH_HINT = 'oidc'
-THIRD_PARTY_AUTH_ONLY_HINT = 'oidc'
-FEATURES['ENABLE_REQUIRE_THIRD_PARTY_AUTH'] = True
+THIRD_PARTY_AUTH_ONLY_HINT = ''
+FEATURES['ENABLE_REQUIRE_THIRD_PARTY_AUTH'] = False  # Don't require SSO
 SOCIAL_AUTH_RAISE_EXCEPTIONS = False
 
 # Hide all non-SSO auth options
@@ -243,8 +242,8 @@ CSRF_TRUSTED_ORIGINS = [
     'http://91.107.146.137:1999',
 ]
 
-# Ensure login redirect goes directly to SSO
-LOGIN_URL = '/auth/login/oidc/'
+# Ensure login redirect goes to normal login
+LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -401,9 +400,9 @@ SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 # Disable enterprise login
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
 
-# Disable MFE URL pattern - go directly to SSO
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
+# Enable MFE URL pattern for normal login
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
 
 # Override account MFE settings too
 ACCOUNT_MICROFRONTEND_URL = None
@@ -456,10 +455,10 @@ LOGIN_URL = '/login'
 # Production settings to ensure MFE is enabled
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-production-settings", """
-# Disable MFE FOR AUTH - go directly to SSO
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
+# Enable MFE FOR AUTH
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+ENABLE_AUTHN_MICROFRONTEND = True
 
 # Ensure third-party auth is enabled in production
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
@@ -471,11 +470,11 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 """),
 ])
 
-# Add CSS and JS to hide forms and auto-redirect
+# Configure SSO as an option alongside normal login
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
-# Configure SSO button to be prominent in MFE
-THIRD_PARTY_AUTH_ONLY_PROMPT = ""
+# Configure SSO button to be visible in MFE
+THIRD_PARTY_AUTH_ONLY_PROMPT = "Or sign in with:"
 THIRD_PARTY_AUTH_PROVIDERS = [{
     'backend_name': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
     'name': 'oidc',
@@ -483,46 +482,8 @@ THIRD_PARTY_AUTH_PROVIDERS = [{
     'visible': True,
     'icon_class': 'fa-sign-in',
     'login_url': '/auth/login/oidc/',
+    'skip_registration_form': True,
 }]
-
-# Hide login forms and auto-redirect
-MFE_CONFIG['AUTHN_MFE'] = {
-    'DISABLE_ENTERPRISE_LOGIN': True,
-    'HIDE_REGISTRATION_FORM': True,
-    'IMMEDIATE_REDIRECT_TO_TPA': 'oidc',
-}
-
-# Custom CSS to hide all form elements
-CUSTOM_CSS = '''
-<style>
-/* Hide all form elements */
-.login-form, .register-form, form input, form button:not(.btn-tpa),
-.form-field, .pgn__form-group, .other-ways-text {
-    display: none !important;
-}
-/* Center SSO button */
-.btn-tpa, .social-auth-buttons {
-    margin: 50px auto !important;
-    display: block !important;
-}
-</style>
-'''
-
-# Custom JS for auto-redirect
-CUSTOM_JS = '''
-<script>
-window.addEventListener("load", function() {
-    setTimeout(function() {
-        var ssoLink = document.querySelector('a[href*="/auth/login/oidc/"]');
-        if (ssoLink) {
-            ssoLink.click();
-        } else {
-            window.location.href = "/auth/login/oidc/";
-        }
-    }, 500);
-});
-</script>
-'''
 """),
 ])
 
