@@ -241,7 +241,10 @@ SESSION_COOKIE_SECURE = False  # Set to True only if using HTTPS
 
 # Ensure login redirect works
 {% if SSO_USE_MFE %}
+# Force MFE authn URL (not just /login)
 LOGIN_URL = '{{ SSO_MFE_URL }}/authn/login'
+# Override any Django defaults
+LOGOUT_URL = '/logout'
 {% else %}
 LOGIN_URL = '{{ SSO_REDIRECT_URL }}'
 {% endif %}
@@ -250,6 +253,10 @@ LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/dashboard'
 SOCIAL_AUTH_INACTIVE_USER_URL = '/dashboard'
+
+# Force override Django's default login URL behavior
+import django.conf.global_settings
+django.conf.global_settings.LOGIN_URL = LOGIN_URL
 
 # Additional session security settings
 SOCIAL_AUTH_SESSION_EXPIRATION = False
@@ -305,6 +312,7 @@ class SSORedirectMiddleware(MiddlewareMixin):
             '/api/user/v1/account/login_session',
             '/create_account',
             '/ui/login',
+            '/accounts/login',  # Django default login URL
         ]
         
         # Check if this is an auth URL
