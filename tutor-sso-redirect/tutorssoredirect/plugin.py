@@ -33,11 +33,11 @@ hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # SSO Redirect Plugin Settings - Enable MFE with auto-redirect to SSO
 
-# Enable the authn MFE for normal login
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
-FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
+# DISABLE MFE - FORCE DIRECT TO ZITADEL
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
 
 # Enable both SSO and normal login
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  
@@ -84,14 +84,14 @@ HIDE_USERNAME_EMAIL_FIELD = False
 HIDE_PASSWORD_FIELD = False
 THIRD_PARTY_AUTH_ONLY_PROMPT = False
 
-# Allow both SSO and normal login
+# FORCE SSO ONLY
 SOCIAL_AUTH_REDIRECT_IS_HTTPS = False
-ALWAYS_REDIRECT_TO_THIRD_PARTY_AUTH = False  # Don't force redirect
+ALWAYS_REDIRECT_TO_THIRD_PARTY_AUTH = True  # FORCE REDIRECT
 
-# Enable both login methods
-FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = True
-FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
-FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = False  # Allow normal login too
+# DISABLE NORMAL LOGIN
+FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
+FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
+FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = True  # SSO ONLY
 
 # Additional settings for SSO
 THIRD_PARTY_AUTH_HINT = 'oidc'
@@ -242,8 +242,8 @@ CSRF_TRUSTED_ORIGINS = [
     'http://91.107.146.137:1999',
 ]
 
-# Ensure login redirect goes to normal login
-LOGIN_URL = '/login'
+# FORCE LOGIN TO ZITADEL
+LOGIN_URL = '/auth/login/oidc/'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -377,9 +377,8 @@ sso_redirect_module.activate_user = activate_user
 # Add to sys.modules
 sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
-# Insert middleware at the BEGINNING of the stack
-# Disable middleware to allow MFE flow
-# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
+# INSERT MIDDLEWARE TO FORCE REDIRECTS
+MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 
 # Disable password reset
 FEATURES['ENABLE_PASSWORD_RESET'] = False
@@ -400,9 +399,9 @@ SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 # Disable enterprise login
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
 
-# Enable MFE URL pattern for normal login
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+# DISABLE MFE COMPLETELY
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
 
 # Override account MFE settings too
 ACCOUNT_MICROFRONTEND_URL = None
@@ -455,10 +454,10 @@ LOGIN_URL = '/login'
 # Production settings to ensure MFE is enabled
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-production-settings", """
-# Enable MFE FOR AUTH
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
+# DISABLE MFE - FORCE ZITADEL
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
 
 # Ensure third-party auth is enabled in production
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True

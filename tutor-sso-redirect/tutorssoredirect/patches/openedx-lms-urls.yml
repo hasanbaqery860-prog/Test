@@ -1,0 +1,25 @@
+name: openedx-lms-urls
+content: |
+  # FORCE EVERYTHING TO ZITADEL - NO EXCEPTIONS
+  from django.urls import re_path
+  from django.http import HttpResponsePermanentRedirect
+  
+  def force_zitadel(request):
+      """GO TO ZITADEL NOW"""
+      protocol = 'https' if request.is_secure() else 'http'
+      host = request.get_host()
+      next_url = request.GET.get('next', '/dashboard')
+      return HttpResponsePermanentRedirect(f"{protocol}://{host}/auth/login/oidc/?next={next_url}")
+  
+  # OVERRIDE EVERYTHING
+  auth_redirects = [
+      re_path(r'^login/?$', force_zitadel),
+      re_path(r'^register/?$', force_zitadel),
+      re_path(r'^signin/?$', force_zitadel),
+      re_path(r'^signup/?$', force_zitadel),
+      re_path(r'^auth/login/?$', force_zitadel),
+      re_path(r'^account/login/?$', force_zitadel),
+      re_path(r'^user_api/v1/account/login_session/?$', force_zitadel),
+  ]
+  
+  urlpatterns = auth_redirects + urlpatterns
