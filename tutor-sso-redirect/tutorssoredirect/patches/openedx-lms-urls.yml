@@ -4,22 +4,33 @@ content: |
   from django.urls import re_path, path
   from django.shortcuts import redirect
   from django.conf import settings
-  from django.http import HttpResponseRedirect
+  from django.http import HttpResponsePermanentRedirect
+  import urllib.parse
   
-  # Create a view that redirects to MFE with auto-SSO parameter
-  def mfe_auto_sso_redirect(request):
-      """Redirect to MFE with parameter to trigger auto-SSO"""
-      mfe_url = getattr(settings, 'AUTHN_MICROFRONTEND_URL', 'http://91.107.146.137:1999/authn')
+  # FORCE DIRECT ZITADEL REDIRECT - NO MFE, NO FORMS
+  def force_zitadel_redirect(request):
+      """Bypass everything and go straight to Zitadel"""
+      protocol = 'https' if request.is_secure() else 'http'
+      host = request.get_host()
       next_url = request.GET.get('next', '/dashboard')
-      # Add tpa_hint to trigger immediate SSO redirect
-      redirect_url = f"{mfe_url}/login?next={next_url}&tpa_hint=oidc"
-      return HttpResponseRedirect(redirect_url)
+      
+      # Build the complete SSO URL
+      sso_url = f"{protocol}://{host}/auth/login/oidc/"
+      if next_url:
+          sso_url += f"?next={urllib.parse.quote(next_url)}"
+      
+      return HttpResponsePermanentRedirect(sso_url)
   
-  # Override login/register to add auto-SSO hint
+  # Override ALL authentication URLs
   auth_redirects = [
-      re_path(r'^login/?$', mfe_auto_sso_redirect, name='signin_user'),
-      re_path(r'^register/?$', mfe_auto_sso_redirect, name='register_user'),
+      re_path(r'^login/?$', force_zitadel_redirect, name='signin_user'),
+      re_path(r'^register/?$', force_zitadel_redirect, name='register_user'),
+      re_path(r'^signin/?$', force_zitadel_redirect, name='login'),
+      re_path(r'^signup/?$', force_zitadel_redirect, name='register'),
+      re_path(r'^auth/login/?$', force_zitadel_redirect, name='auth_login'),
+      re_path(r'^create_account/?$', force_zitadel_redirect, name='create_account'),
+      re_path(r'^user_api/v1/account/login_session/?$', force_zitadel_redirect, name='login_session'),
   ]
   
-  # Prepend our redirects
+  # Prepend our redirects to catch everything first
   urlpatterns = auth_redirects + urlpatterns

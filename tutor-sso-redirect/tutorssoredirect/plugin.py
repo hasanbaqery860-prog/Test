@@ -33,11 +33,11 @@ hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # SSO Redirect Plugin Settings - Enable MFE with auto-redirect to SSO
 
-# Enable the authn MFE
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
-FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
+# DISABLE the authn MFE completely
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
 
 # Disable all the login/register bullshit
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  # Actually ENABLE for SSO users
@@ -184,6 +184,12 @@ SOCIAL_AUTH_LOGIN_ERROR_URL = '/dashboard'
 SOCIAL_AUTH_BACKEND_ERROR_URL = '/dashboard'
 SOCIAL_AUTH_NEW_ASSOCIATION_REDIRECT_URL = '/dashboard'
 
+# CRITICAL: Auto-activate users from SSO
+SOCIAL_AUTH_USER_FIELDS = ['username', 'email', 'first_name', 'last_name', 'is_active']
+FEATURES['SKIP_EMAIL_VERIFICATION'] = True
+FEATURES['AUTOMATIC_VERIFY_STUDENT_IDENTITY_FOR_TESTING'] = True
+FEATURES['ENABLE_ACCOUNT_ACTIVATION_REQUIREMENT'] = False
+
 # User creation pipeline - Use standard social_core pipeline with session creation
 SOCIAL_AUTH_PIPELINE = (
     # Get the information we can about the user and return it
@@ -211,6 +217,9 @@ SOCIAL_AUTH_PIPELINE = (
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
     
+    # Activate user
+    'lms.djangoapps.sso_redirect.activate_user',
+    
     # Force login - this should create the session
     'social_django.pipeline.login_user',
 )
@@ -234,8 +243,8 @@ CSRF_TRUSTED_ORIGINS = [
     'http://91.107.146.137:1999',
 ]
 
-# Ensure login redirect goes to MFE first
-LOGIN_URL = '/login'
+# Ensure login redirect goes directly to SSO
+LOGIN_URL = '/auth/login/oidc/'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -358,6 +367,14 @@ from types import ModuleType
 sso_redirect_module = ModuleType('lms.djangoapps.sso_redirect')
 sso_redirect_module.SSORedirectMiddleware = SSORedirectMiddleware
 
+# Add the activate_user function
+def activate_user(backend, user, *args, **kwargs):
+    if user:
+        user.is_active = True
+        user.save()
+        
+sso_redirect_module.activate_user = activate_user
+
 # Add to sys.modules
 sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
@@ -384,9 +401,9 @@ SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 # Disable enterprise login
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
 
-# Enable MFE URL pattern for legacy to redirect to MFE
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+# Disable MFE URL pattern - go directly to SSO
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
 
 # Override account MFE settings too
 ACCOUNT_MICROFRONTEND_URL = None
@@ -439,10 +456,10 @@ LOGIN_URL = '/login'
 # Production settings to ensure MFE is enabled
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-production-settings", """
-# Enable MFE FOR AUTH
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
+# Disable MFE FOR AUTH - go directly to SSO
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
 
 # Ensure third-party auth is enabled in production
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
@@ -512,10 +529,10 @@ window.addEventListener("load", function() {
 # Development settings
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-development-settings", """
-# Enable MFE FOR AUTH IN DEV
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
+# Disable MFE FOR AUTH IN DEV - go directly to SSO
+AUTHN_MICROFRONTEND_URL = None
+AUTHN_MICROFRONTEND_DOMAIN = None
+ENABLE_AUTHN_MICROFRONTEND = False
 
 # Ensure third-party auth is enabled in dev
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
