@@ -10,575 +10,125 @@ from tutor import hooks
 
 from .__about__ import __version__
 
-########################################
-# CONFIGURATION
-########################################
-
+# Configuration
 hooks.Filters.CONFIG_DEFAULTS.add_items([
-    # Plugin settings
     ("SSO_REDIRECT_ENABLED", True),
-    ("SSO_REDIRECT_URL", "/auth/login/oidc/"),  # Default SSO URL
-    # OIDC Provider settings
-    ("SSO_OIDC_KEY", ""),  # Client ID from Zitadel
-    ("SSO_OIDC_SECRET", ""),  # Client Secret from Zitadel
-    ("SSO_OIDC_ENDPOINT", ""),  # Zitadel OIDC endpoint
+    ("SSO_REDIRECT_URL", "/auth/login/oidc/"),
+    ("SSO_OIDC_KEY", ""),
+    ("SSO_OIDC_SECRET", ""),
+    ("SSO_OIDC_ENDPOINT", ""),
 ])
 
-########################################
-# PATCHES
-########################################
+# LMS common settings patch content
+LMS_COMMON_SETTINGS = """
+# SSO Redirect Plugin Settings
 
-# Add patches to openedx-lms-common-settings
-hooks.Filters.ENV_PATCHES.add_items([
-    ("openedx-lms-common-settings", """
-# SSO Redirect Plugin Settings - Enable MFE with auto-redirect to SSO
-
-# ENABLE MFE
+# Enable MFE
 AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
 AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
 ENABLE_AUTHN_MICROFRONTEND = True
 FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 
-# Enable both SSO and normal login
-FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  
-FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = True  # Allow normal login too
-FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
-FEATURES['SHOW_REGISTRATION_LINKS'] = False
-FEATURES['ENABLE_MKTG_SITE'] = False
-
-# ENABLE THIRD PARTY AUTH - THIS IS FUCKING IMPORTANT
+# Third party auth settings
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
-FEATURES['ENABLE_REQUIRE_THIRD_PARTY_AUTH'] = False
-
-# Configure authentication backends - ADD OIDC BACKEND
-AUTHENTICATION_BACKENDS = (
-    'social_core.backends.open_id_connect.OpenIdConnectAuth',  # Generic OIDC backend
-    'django.contrib.auth.backends.ModelBackend',  # Keep default backend as fallback
-)
-
-# Social auth settings - Use the default Django storage instead of the problematic one
-SOCIAL_AUTH_STRATEGY = 'social_django.strategy.DjangoStrategy'
-SOCIAL_AUTH_STORAGE = 'social_django.models.DjangoStorage'
+FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
+FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
 
 # OIDC Configuration
 SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = '{{ SSO_OIDC_ENDPOINT }}'
 SOCIAL_AUTH_OIDC_KEY = '{{ SSO_OIDC_KEY }}'
 SOCIAL_AUTH_OIDC_SECRET = '{{ SSO_OIDC_SECRET }}'
 
-# Enable the OIDC backend
+# Authentication backends
+AUTHENTICATION_BACKENDS = (
+    'social_core.backends.open_id_connect.OpenIdConnectAuth',
+    'django.contrib.auth.backends.ModelBackend',
+)
+
+# Social auth settings
+SOCIAL_AUTH_STRATEGY = 'social_django.strategy.DjangoStrategy'
+SOCIAL_AUTH_STORAGE = 'social_django.models.DjangoStorage'
+
+# Backend configuration
 THIRD_PARTY_AUTH_BACKENDS = ['social_core.backends.open_id_connect.OpenIdConnectAuth']
 
-# CRITICAL: Backend name mapping for Django Admin
-THIRD_PARTY_AUTH_BACKENDS_ALIASES = {
-    'oidc': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
-}
+# Pipeline
+SOCIAL_AUTH_PIPELINE = (
+    'social_core.pipeline.social_auth.social_details',
+    'social_core.pipeline.social_auth.social_uid',
+    'social_core.pipeline.social_auth.auth_allowed',
+    'social_core.pipeline.social_auth.social_user',
+    'social_core.pipeline.user.get_username',
+    'social_core.pipeline.user.create_user',
+    'social_core.pipeline.social_auth.associate_user',
+    'social_core.pipeline.social_auth.load_extra_data',
+    'social_core.pipeline.user.user_details',
+    'social_django.pipeline.login_user',
+)
 
-# Ensure the backend is properly registered
-BACKEND_NAME = 'oidc'
+# Session settings
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_SAMESITE = 'Lax'
 
-# Configure MFE to auto-redirect to OIDC
-# This makes the MFE immediately redirect to the SSO provider
-AUTHN_REDIRECT_TO_OIDC = True
-AUTHN_DEFAULT_REDIRECT_URL = '/auth/login/oidc/'
-AUTHN_OIDC_PROVIDER_SLUG = 'oidc'
+# Login URLs
+LOGIN_URL = '/login'
+LOGIN_REDIRECT_URL = '/dashboard'
+SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
 
-# Skip showing login/signup forms completely
-AUTHN_MINIMAL_HEADER = True
-FEATURES['SKIP_EMAIL_VALIDATION'] = True
-FEATURES['AUTOMATIC_AUTH_FOR_TESTING'] = False
-
-# Show login forms but also show SSO option
-HIDE_USERNAME_EMAIL_FIELD = False
-HIDE_PASSWORD_FIELD = False
-THIRD_PARTY_AUTH_ONLY_PROMPT = False
-
-# FORCE SSO ONLY
-SOCIAL_AUTH_REDIRECT_IS_HTTPS = False
-ALWAYS_REDIRECT_TO_THIRD_PARTY_AUTH = True  # FORCE REDIRECT
-
-# DISABLE NORMAL LOGIN
-FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
-FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = False
-FEATURES['ENABLE_THIRD_PARTY_AUTH_ONLY'] = True  # SSO ONLY
-
-# Additional settings for SSO
-THIRD_PARTY_AUTH_HINT = 'oidc'
-THIRD_PARTY_AUTH_ONLY_HINT = ''
-FEATURES['ENABLE_REQUIRE_THIRD_PARTY_AUTH'] = False  # Don't require SSO
-SOCIAL_AUTH_RAISE_EXCEPTIONS = False
-
-# Hide all non-SSO auth options
-REGISTRATION_EXTRA_FIELDS = {}
-REGISTRATION_FIELD_ORDER = []
-FEATURES['ENABLE_ACCOUNT_ACTIVATION_REQUIREMENT'] = False
-
-# Auto-submit the SSO form
-AUTHN_PROGRESSIVE_PROFILING_SUPPORT = False
-SKIP_AUTHN_MFE_REDIRECT_TIMER = True
-
-# CORS Configuration for login endpoints
+# CORS
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://91.107.146.137:8000",
     "http://91.107.146.137:8001",
     "http://91.107.146.137:1999",
-    "http://local.openedx.io:8000",
-    "http://local.openedx.io:8001",
-    "http://local.openedx.io:1999",
-    "http://apps.local.openedx.io:1999",
 ]
 
-# Additional CORS headers for login refresh
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-    'use-jwt-cookie',
-]
-
-# Additional OIDC settings - CRITICAL FOR AUTHENTICATION
-SOCIAL_AUTH_OIDC_SCOPE = ['openid', 'profile', 'email']
-SOCIAL_AUTH_OIDC_ID_TOKEN_DECRYPTION_KEY = None
-SOCIAL_AUTH_OIDC_USERNAME_KEY = 'preferred_username'
-SOCIAL_AUTH_OIDC_USE_NONCE = True
-
-# CRITICAL: Map user data from Zitadel
-SOCIAL_AUTH_OIDC_USERNAME_KEY = 'preferred_username'
-SOCIAL_AUTH_OIDC_EMAIL_KEY = 'email'
-SOCIAL_AUTH_OIDC_FULLNAME_KEY = 'name'
-SOCIAL_AUTH_OIDC_FIRST_NAME_KEY = 'given_name'
-SOCIAL_AUTH_OIDC_LAST_NAME_KEY = 'family_name'
-
-# Ensure proper response type for authentication
-SOCIAL_AUTH_OIDC_RESPONSE_TYPE = 'code'
-SOCIAL_AUTH_OIDC_USE_UNIQUE_USER_ID = True
-
-# Override the backend to get settings from Django settings instead of DB
-def get_oidc_setting(name, default=None):
-    '''Get OIDC settings from Django settings'''
-    return globals().get(f'SOCIAL_AUTH_OIDC_{name}', default)
-
-# Monkey patch the OIDC backend to use our settings
-try:
-    from social_core.backends.open_id_connect import OpenIdConnectAuth
-    
-    # Store original method
-    _original_setting = OpenIdConnectAuth.setting
-    
-    def patched_setting(self, name, default=None):
-        # First try to get from our settings
-        value = get_oidc_setting(name, None)
-        if value is not None:
-            return value
-        # Fallback to original method
-        return _original_setting(self, name, default)
-    
-    # Apply patch
-    OpenIdConnectAuth.setting = patched_setting
-    
-    # Also patch the oidc_endpoint method to use our endpoint directly
-    def patched_oidc_endpoint(self):
-        return get_oidc_setting('OIDC_ENDPOINT', '').rstrip('/')
-    
-    OpenIdConnectAuth.oidc_endpoint = patched_oidc_endpoint
-    
-except ImportError:
-    pass
-
-# AUTO CREATE USERS FROM SSO - THIS IS CRITICAL
+# User creation
 SOCIAL_AUTH_AUTO_CREATE_USERS = True
-FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
-FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
-
-# Fix dashboard session issues
-SOCIAL_AUTH_ALWAYS_ASSOCIATE = True
-SOCIAL_AUTH_LOGIN_ERROR_URL = '/dashboard'
-SOCIAL_AUTH_BACKEND_ERROR_URL = '/dashboard'
-SOCIAL_AUTH_NEW_ASSOCIATION_REDIRECT_URL = '/dashboard'
-
-# CRITICAL: Auto-activate users from SSO
-SOCIAL_AUTH_USER_FIELDS = ['username', 'email', 'first_name', 'last_name', 'is_active']
 FEATURES['SKIP_EMAIL_VERIFICATION'] = True
-FEATURES['AUTOMATIC_VERIFY_STUDENT_IDENTITY_FOR_TESTING'] = True
-FEATURES['ENABLE_ACCOUNT_ACTIVATION_REQUIREMENT'] = False
+"""
 
-# User creation pipeline - FIXED FOR PROPER SESSION CREATION
-SOCIAL_AUTH_PIPELINE = (
-    # Get the information we can about the user and return it
-    'social_core.pipeline.social_auth.social_details',
-    
-    # Get the social uid from whichever service we're authing thru
-    'social_core.pipeline.social_auth.social_uid',
-    
-    # Verifies that the current auth process is valid
-    'social_core.pipeline.social_auth.auth_allowed',
-    
-    # Checks if the current social-account is already associated
-    'social_core.pipeline.social_auth.social_user',
-    
-    # Make up a username if one is not provided
-    'social_core.pipeline.user.get_username',
-    
-    # Create a user if one doesn't exist
-    'social_core.pipeline.user.create_user',
-    
-    # Create the user<->social association
-    'social_core.pipeline.social_auth.associate_user',
-    
-    # Populate user data
-    'social_core.pipeline.social_auth.load_extra_data',
-    'social_core.pipeline.user.user_details',
-    
-    # Activate user - CRITICAL
-    'lms.djangoapps.sso_redirect.activate_user',
-    
-    # Set user as logged in - CRITICAL
-    'lms.djangoapps.sso_redirect.set_logged_in_cookies',
-    
-    # Force login - this should create the session
-    'social_django.pipeline.login_user',
-)
+# URL redirect patch content
+URL_REDIRECT_PATCH = """
+from django.urls import re_path
+from django.http import HttpResponseRedirect
+from django.conf import settings
 
-# Session and cookie settings for SSO
-SESSION_COOKIE_NAME = 'sessionid'
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 14 days
-SESSION_SAVE_EVERY_REQUEST = True  # Important for SSO
-SESSION_COOKIE_DOMAIN = ""  # Set to empty to work with all subdomains
-SESSION_COOKIE_HTTPONLY = True
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_SECURE = False  # Set to True for HTTPS
+def mfe_sso_redirect(request):
+    mfe_url = getattr(settings, 'AUTHN_MICROFRONTEND_URL', 'http://91.107.146.137:1999/authn')
+    next_url = request.GET.get('next', '/dashboard')
+    return HttpResponseRedirect(f"{mfe_url}/login?next={next_url}&tpa_hint=oidc")
 
-# Fix CSRF for dashboard
-CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_SECURE = False  # Set to True for HTTPS
-CSRF_TRUSTED_ORIGINS = [
-    'http://91.107.146.137:8000',
-    'http://91.107.146.137:8001',
-    'http://91.107.146.137:1999',
+auth_redirects = [
+    re_path(r'^login/?$', mfe_sso_redirect),
+    re_path(r'^register/?$', mfe_sso_redirect),
+    re_path(r'^signin/?$', mfe_sso_redirect),
+    re_path(r'^signup/?$', mfe_sso_redirect),
 ]
 
-# Login goes to MFE
-LOGIN_URL = '/login'
-LOGIN_REDIRECT_URL = '/dashboard'
-LOGOUT_REDIRECT_URL = '/'
-SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
-SOCIAL_AUTH_NEW_USER_REDIRECT_URL = '/dashboard'
-SOCIAL_AUTH_INACTIVE_USER_URL = '/dashboard'
+urlpatterns = auth_redirects + urlpatterns
+"""
 
-# Username generation from email
-SOCIAL_AUTH_USERNAME_IS_FULL_EMAIL = True
-SOCIAL_AUTH_PROTECTED_USER_FIELDS = ['email', 'first_name', 'last_name']
-SOCIAL_AUTH_SANITIZE_REDIRECTS = False
-
-# Force login through social auth
-SOCIAL_AUTH_FORCE_POST_DISCONNECT = False
-
-# CRITICAL: Callback URL settings
-SOCIAL_AUTH_REDIRECT_URI = 'http://91.107.146.137:8000/auth/complete/oidc/'
-SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ['91.107.146.137:8000', '91.107.146.137:8001', '91.107.146.137:1999']
-
-# Ensure login_refresh works properly
-LOGIN_REFRESH_REDIRECT_URL = '/dashboard'
-SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
-
-# JWT Cookie settings for login refresh
-JWT_AUTH_COOKIE_HEADER_PAYLOAD = 'edx-jwt-cookie-header-payload'
-JWT_AUTH_COOKIE_SIGNATURE = 'edx-jwt-cookie-signature'
-JWT_AUTH_REFRESH_COOKIE = 'edx-jwt-refresh-cookie'
-
-# Enable JWT cookies for authentication
-JWT_AUTH_COOKIE = 'edx-jwt-cookie'
-JWT_AUTH_COOKIE_DOMAIN = ''
-JWT_AUTH_COOKIE_PATH = '/'
-JWT_AUTH_COOKIE_SAMESITE = 'Lax'
-JWT_AUTH_COOKIE_SECURE = False  # Set to True for HTTPS
-
-# Ensure JWT authentication is enabled
-JWT_AUTH_BACKEND = 'django.contrib.auth.backends.ModelBackend'
-
-# Define the SSO redirect middleware inline
-from django.conf import settings
-from django.shortcuts import redirect
-from django.utils.deprecation import MiddlewareMixin
-from django.http import HttpResponsePermanentRedirect
-import logging
-
-logger = logging.getLogger(__name__)
-
-class SSORedirectMiddleware(MiddlewareMixin):
-    '''Middleware to redirect authentication requests to SSO'''
-    
-    def process_request(self, request):
-        if not getattr(settings, 'SSO_REDIRECT_ENABLED', True):
-            return None
-            
-        path = request.path.lower().rstrip('/')
-        
-        # Skip if user is already authenticated
-        if hasattr(request, 'user') and request.user.is_authenticated:
-            return None
-            
-        # List of auth-related URLs to intercept
-        auth_patterns = [
-            '/login',
-            '/signin', 
-            '/register',
-            '/signup',
-            '/logistration',
-            '/authn',  # Intercept MFE URLs too
-            '/user_api/v1/account/login_session',
-            '/api/user/v1/account/login_session',
-            '/create_account',
-            '/ui/login',
-            '/account',  # Account pages
-        ]
-        
-        # Check if this is an auth URL
-        is_auth_url = False
-        for pattern in auth_patterns:
-            if pattern in path or path.endswith(pattern):
-                is_auth_url = True
-                break
-        
-        if is_auth_url:
-            # Skip if it's an API endpoint we need to keep
-            skip_patterns = [
-                '/api/csrf/', 
-                '/static/', 
-                '/media/', 
-                '/admin/', 
-                '/oauth2/', 
-                '/auth/complete/', 
-                '/logout', 
-                '/auth/login/oidc/',
-                '/login_refresh',  # Skip login refresh to avoid CORS issues
-                '/api/user/v2/account/login_session/',  # API endpoints
-                '/api/mobile/',
-                '/heartbeat',
-            ]
-            if any(skip in path for skip in skip_patterns):
-                return None
-            
-            # Get the full SSO URL
-            sso_url = getattr(settings, 'SSO_REDIRECT_URL', '/auth/login/oidc/')
-            
-            # Make it absolute if it's relative
-            if sso_url.startswith('/'):
-                protocol = 'https' if request.is_secure() else 'http'
-                host = request.get_host()
-                sso_url = f"{protocol}://{host}{sso_url}"
-            
-            # Check if this is already the SSO URL
-            if request.build_absolute_uri().startswith(sso_url):
-                return None
-            
-            # Log the redirect
-            logger.info(f"SSO Redirect: INTERCEPTING {request.path} -> {sso_url}")
-            
-            # Preserve next parameter
-            next_url = request.GET.get('next', '')
-            if next_url:
-                redirect_url = f"{sso_url}?next={next_url}"
-            else:
-                redirect_url = sso_url
-            
-            # Use permanent redirect
-            return HttpResponsePermanentRedirect(redirect_url)
-        
-        return None
-
-# Create a module to hold the middleware
-import sys
-from types import ModuleType
-
-# Create the module
-sso_redirect_module = ModuleType('lms.djangoapps.sso_redirect')
-sso_redirect_module.SSORedirectMiddleware = SSORedirectMiddleware
-
-# Add the activate_user function
-def activate_user(backend, user, *args, **kwargs):
-    if user:
-        user.is_active = True
-        user.save()
-        
-# Add the set_logged_in_cookies function
-def set_logged_in_cookies(backend, user, request, *args, **kwargs):
-    """Ensure proper session and authentication cookies are set"""
-    if user and request:
-        from django.contrib.auth import login
-        from common.djangoapps.student.models import UserProfile
-        
-        # Ensure user profile exists
-        UserProfile.objects.get_or_create(user=user)
-        
-        # Force login
-        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-        request.session.save()
-        
-sso_redirect_module.activate_user = activate_user
-sso_redirect_module.set_logged_in_cookies = set_logged_in_cookies
-
-# Add to sys.modules
-sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
-
-# Disable middleware temporarily to ensure callbacks work
-# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
-
-# Disable password reset
-FEATURES['ENABLE_PASSWORD_RESET'] = False
-FEATURES['ENABLE_CHANGE_USER_PASSWORD_ADMIN'] = False
-FEATURES['ENABLE_ACCOUNT_PASSWORD_RESET'] = False
-
-# Disable account activation
-FEATURES['ENABLE_ACCOUNT_ACTIVATION'] = False
-FEATURES['SKIP_EMAIL_VERIFICATION'] = True
-
-# Registration redirect
-REGISTRATION_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
-
-# Additional settings
-SSO_REDIRECT_ENABLED = {{ SSO_REDIRECT_ENABLED }}
-SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
-
-# Disable enterprise login
-FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
-
-# ENABLE MFE
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-
-# Override account MFE settings too
-ACCOUNT_MICROFRONTEND_URL = None
-
-# Logging
-LOGGING['loggers']['lms.djangoapps.sso_redirect'] = {
-    'handlers': ['console'],
-    'level': 'INFO',
-    'propagate': False,
-}
-
-# Log social auth for debugging
-LOGGING['loggers']['social'] = {
-    'handlers': ['console'],
-    'level': 'DEBUG',
-    'propagate': False,
-}
-
-LOGGING['loggers']['oauth2_provider'] = {
-    'handlers': ['console'],
-    'level': 'DEBUG',
-    'propagate': False,
-}
-
-LOGGING['loggers']['common.djangoapps.third_party_auth'] = {
-    'handlers': ['console'],
-    'level': 'DEBUG',
-    'propagate': False,
-}
-"""),
-])
-
-# Add patches to openedx-cms-common-settings
+# Add patches
 hooks.Filters.ENV_PATCHES.add_items([
-    ("openedx-cms-common-settings", """
-# SSO Redirect Plugin Settings for CMS
-FEATURES['DISABLE_STUDIO_SSO_OVER_LMS'] = False
-FEATURES['ENABLE_COMBINED_LOGIN_REGISTRATION'] = False
-FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
-
-# Redirect CMS login to MFE first
-LOGIN_URL = '/login'
-
-# Insert middleware at the beginning for CMS too
-# Disable middleware to allow MFE flow
-# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
-"""),
+    ("openedx-lms-common-settings", LMS_COMMON_SETTINGS),
 ])
 
-# Production settings to ensure MFE is enabled
 hooks.Filters.ENV_PATCHES.add_items([
-    ("openedx-lms-production-settings", """
-# ENABLE MFE
-AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
-AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
-ENABLE_AUTHN_MICROFRONTEND = True
-
-# Ensure third-party auth is enabled in production
-FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
-FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
-
-# Session settings for production
-SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
-SESSION_COOKIE_SAMESITE = 'Lax'
-"""),
+    ("openedx-lms-urls", URL_REDIRECT_PATCH),
 ])
 
-# Add auto-redirect JavaScript for MFE
+# MFE environment patches
 hooks.Filters.ENV_PATCHES.add_items([
-    ("openedx-lms-common-settings", """
-# Configure SSO button and auto-redirect
-THIRD_PARTY_AUTH_ONLY_PROMPT = ""
-
-# CRITICAL: This must match the slug in Django Admin
-FEATURES['THIRD_PARTY_AUTH_BACKENDS'] = ['oidc']
-
-# Provider configuration
-THIRD_PARTY_AUTH_PROVIDERS = [{
-    'backend_name': 'oidc',  # Must match the slug in Django Admin
-    'name': 'oidc',
-    'slug': 'oidc',
-    'display_name': 'Sign in with Zitadel',
-    'visible': True,
-    'icon_class': 'fa-sign-in',
-    'login_url': '/auth/login/oidc/',
-    'skip_registration_form': True,
-}]
-
-# Map backend names
-SOCIAL_AUTH_BACKEND_MAPPING = {
-    'oidc': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
-}
-
-# Add JavaScript to auto-click SSO button
-MFE_CONFIG_OVERRIDE = {
-    'AUTHN_MFE': {
-        'AUTO_REDIRECT_TO_TPA': 'oidc',
-    }
-}
+    ("mfe-env-production", """
+LOGIN_ISSUE_SUPPORT_LINK=''
+DISABLE_ENTERPRISE_LOGIN=true
+ENABLE_PROGRESSIVE_PROFILING_ON_AUTHN=false
 """),
 ])
 
-# Development settings
-hooks.Filters.ENV_PATCHES.add_items([
-    ("openedx-lms-development-settings", """
-# Disable MFE FOR AUTH IN DEV - go directly to SSO
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
-
-# Ensure third-party auth is enabled in dev
-FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
-FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
-"""),
-])
-
-########################################
-# URL OVERRIDES
-########################################
-
-# Path to patches directory
-patches_dir = pkg_resources.resource_filename(
-    "tutorssoredirect", "patches"
-)
-
-# Automatically load patches
+# Load additional patches from files
+patches_dir = pkg_resources.resource_filename("tutorssoredirect", "patches")
 for patch_file in glob(os.path.join(patches_dir, "*.yml")):
     with open(patch_file) as f:
         hooks.Filters.ENV_PATCHES.add_item((os.path.basename(patch_file)[:-4], f.read()))
