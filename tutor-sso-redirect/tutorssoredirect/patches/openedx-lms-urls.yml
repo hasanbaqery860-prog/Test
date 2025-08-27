@@ -1,0 +1,25 @@
+name: openedx-lms-urls
+content: |
+  # Import required modules
+  from django.urls import re_path, path
+  from django.shortcuts import redirect
+  from django.conf import settings
+  from django.http import HttpResponseRedirect
+  
+  # Create a view that redirects to MFE with auto-SSO parameter
+  def mfe_auto_sso_redirect(request):
+      """Redirect to MFE with parameter to trigger auto-SSO"""
+      mfe_url = getattr(settings, 'AUTHN_MICROFRONTEND_URL', 'http://91.107.146.137:1999/authn')
+      next_url = request.GET.get('next', '/dashboard')
+      # Add tpa_hint to trigger immediate SSO redirect
+      redirect_url = f"{mfe_url}/login?next={next_url}&tpa_hint=oidc"
+      return HttpResponseRedirect(redirect_url)
+  
+  # Override login/register to add auto-SSO hint
+  auth_redirects = [
+      re_path(r'^login/?$', mfe_auto_sso_redirect, name='signin_user'),
+      re_path(r'^register/?$', mfe_auto_sso_redirect, name='register_user'),
+  ]
+  
+  # Prepend our redirects
+  urlpatterns = auth_redirects + urlpatterns

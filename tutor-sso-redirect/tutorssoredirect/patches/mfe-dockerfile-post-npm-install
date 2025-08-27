@@ -1,0 +1,44 @@
+# Hide all login/signup forms and auto-redirect to SSO
+RUN echo '/* Hide all login/signup form elements */\n\
+.login-form, .register-form, .form-field, .pgn__form-control-decorator,\n\
+.btn-brand, .btn-outline-primary, .btn-link, .form-control,\n\
+input[type="email"], input[type="password"], input[type="text"],\n\
+.username-email-field, .password-field, .name-field,\n\
+.pgn__form-group, .pgn__form-label, .pgn__form-control,\n\
+[data-testid="login-form"], [data-testid="register-form"],\n\
+.login-help, .register-help, .other-ways-to-sign-in {\n\
+  display: none !important;\n\
+}\n\
+\n\
+/* Only show SSO button */\n\
+.btn-tpa, .btn-oidc, [data-provider-id="oidc"],\n\
+.social-auth-buttons, .institution-login {\n\
+  display: block !important;\n\
+}\n\
+\n\
+/* Hide everything except SSO section */\n\
+.content > * {\n\
+  display: none !important;\n\
+}\n\
+\n\
+.content .social-auth-buttons,\n\
+.content .institution-login,\n\
+.content .btn-tpa {\n\
+  display: block !important;\n\
+}' >> /openedx/app/src/index.scss
+
+# Add auto-redirect JavaScript
+RUN echo 'window.addEventListener("DOMContentLoaded", function() {\n\
+  setTimeout(function() {\n\
+    // Find and click the SSO button\n\
+    var ssoButton = document.querySelector("[data-provider-id=\"oidc\"]") ||\n\
+                    document.querySelector("a[href*=\"/auth/login/oidc/\"]") ||\n\
+                    document.querySelector(".btn-tpa");\n\
+    if (ssoButton) {\n\
+      ssoButton.click();\n\
+    } else {\n\
+      // Direct redirect if no button found\n\
+      window.location.href = "/auth/login/oidc/";\n\
+    }\n\
+  }, 100);\n\
+});' >> /openedx/app/src/index.jsx

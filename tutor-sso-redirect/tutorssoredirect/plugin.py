@@ -178,6 +178,12 @@ SOCIAL_AUTH_AUTO_CREATE_USERS = True
 FEATURES['ENABLE_THIRD_PARTY_AUTH_AUTO_PROVISIONING'] = True
 FEATURES['ALLOW_PUBLIC_ACCOUNT_CREATION'] = True
 
+# Fix dashboard session issues
+SOCIAL_AUTH_ALWAYS_ASSOCIATE = True
+SOCIAL_AUTH_LOGIN_ERROR_URL = '/dashboard'
+SOCIAL_AUTH_BACKEND_ERROR_URL = '/dashboard'
+SOCIAL_AUTH_NEW_ASSOCIATION_REDIRECT_URL = '/dashboard'
+
 # User creation pipeline - Use standard social_core pipeline with session creation
 SOCIAL_AUTH_PIPELINE = (
     # Get the information we can about the user and return it
@@ -212,10 +218,21 @@ SOCIAL_AUTH_PIPELINE = (
 # Session and cookie settings for SSO
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 14 days
-SESSION_SAVE_EVERY_REQUEST = False
+SESSION_SAVE_EVERY_REQUEST = True  # Important for SSO
 SESSION_COOKIE_DOMAIN = ""  # Set to empty to work with all subdomains
 SESSION_COOKIE_HTTPONLY = True
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False  # Set to True for HTTPS
+
+# Fix CSRF for dashboard
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = False  # Set to True for HTTPS
+CSRF_TRUSTED_ORIGINS = [
+    'http://91.107.146.137:8000',
+    'http://91.107.146.137:8001',
+    'http://91.107.146.137:1999',
+]
 
 # Ensure login redirect goes to MFE first
 LOGIN_URL = '/login'
@@ -437,11 +454,11 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 """),
 ])
 
-# Configure MFE to show SSO button prominently
+# Add CSS and JS to hide forms and auto-redirect
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # Configure SSO button to be prominent in MFE
-THIRD_PARTY_AUTH_ONLY_PROMPT = "Please sign in with your organization's account"
+THIRD_PARTY_AUTH_ONLY_PROMPT = ""
 THIRD_PARTY_AUTH_PROVIDERS = [{
     'backend_name': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
     'name': 'oidc',
@@ -450,6 +467,45 @@ THIRD_PARTY_AUTH_PROVIDERS = [{
     'icon_class': 'fa-sign-in',
     'login_url': '/auth/login/oidc/',
 }]
+
+# Hide login forms and auto-redirect
+MFE_CONFIG['AUTHN_MFE'] = {
+    'DISABLE_ENTERPRISE_LOGIN': True,
+    'HIDE_REGISTRATION_FORM': True,
+    'IMMEDIATE_REDIRECT_TO_TPA': 'oidc',
+}
+
+# Custom CSS to hide all form elements
+CUSTOM_CSS = '''
+<style>
+/* Hide all form elements */
+.login-form, .register-form, form input, form button:not(.btn-tpa),
+.form-field, .pgn__form-group, .other-ways-text {
+    display: none !important;
+}
+/* Center SSO button */
+.btn-tpa, .social-auth-buttons {
+    margin: 50px auto !important;
+    display: block !important;
+}
+</style>
+'''
+
+# Custom JS for auto-redirect
+CUSTOM_JS = '''
+<script>
+window.addEventListener("load", function() {
+    setTimeout(function() {
+        var ssoLink = document.querySelector('a[href*="/auth/login/oidc/"]');
+        if (ssoLink) {
+            ssoLink.click();
+        } else {
+            window.location.href = "/auth/login/oidc/";
+        }
+    }, 500);
+});
+</script>
+'''
 """),
 ])
 
