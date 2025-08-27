@@ -68,6 +68,14 @@ SOCIAL_AUTH_OIDC_SECRET = '{{ SSO_OIDC_SECRET }}'
 # Enable the OIDC backend
 THIRD_PARTY_AUTH_BACKENDS = ['social_core.backends.open_id_connect.OpenIdConnectAuth']
 
+# CRITICAL: Backend name mapping for Django Admin
+THIRD_PARTY_AUTH_BACKENDS_ALIASES = {
+    'oidc': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
+}
+
+# Ensure the backend is properly registered
+BACKEND_NAME = 'oidc'
+
 # Configure MFE to auto-redirect to OIDC
 # This makes the MFE immediately redirect to the SSO provider
 AUTHN_REDIRECT_TO_OIDC = True
@@ -134,11 +142,22 @@ CORS_ALLOW_HEADERS = [
     'use-jwt-cookie',
 ]
 
-# Additional OIDC settings
+# Additional OIDC settings - CRITICAL FOR AUTHENTICATION
 SOCIAL_AUTH_OIDC_SCOPE = ['openid', 'profile', 'email']
 SOCIAL_AUTH_OIDC_ID_TOKEN_DECRYPTION_KEY = None
 SOCIAL_AUTH_OIDC_USERNAME_KEY = 'preferred_username'
 SOCIAL_AUTH_OIDC_USE_NONCE = True
+
+# CRITICAL: Map user data from Zitadel
+SOCIAL_AUTH_OIDC_USERNAME_KEY = 'preferred_username'
+SOCIAL_AUTH_OIDC_EMAIL_KEY = 'email'
+SOCIAL_AUTH_OIDC_FULLNAME_KEY = 'name'
+SOCIAL_AUTH_OIDC_FIRST_NAME_KEY = 'given_name'
+SOCIAL_AUTH_OIDC_LAST_NAME_KEY = 'family_name'
+
+# Ensure proper response type for authentication
+SOCIAL_AUTH_OIDC_RESPONSE_TYPE = 'code'
+SOCIAL_AUTH_OIDC_USE_UNIQUE_USER_ID = True
 
 # Override the backend to get settings from Django settings instead of DB
 def get_oidc_setting(name, default=None):
@@ -189,35 +208,38 @@ FEATURES['SKIP_EMAIL_VERIFICATION'] = True
 FEATURES['AUTOMATIC_VERIFY_STUDENT_IDENTITY_FOR_TESTING'] = True
 FEATURES['ENABLE_ACCOUNT_ACTIVATION_REQUIREMENT'] = False
 
-# User creation pipeline - Use standard social_core pipeline with session creation
+# User creation pipeline - FIXED FOR PROPER SESSION CREATION
 SOCIAL_AUTH_PIPELINE = (
     # Get the information we can about the user and return it
     'social_core.pipeline.social_auth.social_details',
-
+    
     # Get the social uid from whichever service we're authing thru
     'social_core.pipeline.social_auth.social_uid',
-
+    
     # Verifies that the current auth process is valid
     'social_core.pipeline.social_auth.auth_allowed',
-
+    
     # Checks if the current social-account is already associated
     'social_core.pipeline.social_auth.social_user',
-
+    
     # Make up a username if one is not provided
     'social_core.pipeline.user.get_username',
-
+    
     # Create a user if one doesn't exist
     'social_core.pipeline.user.create_user',
-
+    
     # Create the user<->social association
     'social_core.pipeline.social_auth.associate_user',
-
+    
     # Populate user data
     'social_core.pipeline.social_auth.load_extra_data',
     'social_core.pipeline.user.user_details',
     
-    # Activate user
+    # Activate user - CRITICAL
     'lms.djangoapps.sso_redirect.activate_user',
+    
+    # Set user as logged in - CRITICAL
+    'lms.djangoapps.sso_redirect.set_logged_in_cookies',
     
     # Force login - this should create the session
     'social_django.pipeline.login_user',
@@ -258,6 +280,10 @@ SOCIAL_AUTH_SANITIZE_REDIRECTS = False
 # Force login through social auth
 SOCIAL_AUTH_FORCE_POST_DISCONNECT = False
 
+# CRITICAL: Callback URL settings
+SOCIAL_AUTH_REDIRECT_URI = 'http://91.107.146.137:8000/auth/complete/oidc/'
+SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ['91.107.146.137:8000', '91.107.146.137:8001', '91.107.146.137:1999']
+
 # Ensure login_refresh works properly
 LOGIN_REFRESH_REDIRECT_URL = '/dashboard'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -266,6 +292,16 @@ SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
 JWT_AUTH_COOKIE_HEADER_PAYLOAD = 'edx-jwt-cookie-header-payload'
 JWT_AUTH_COOKIE_SIGNATURE = 'edx-jwt-cookie-signature'
 JWT_AUTH_REFRESH_COOKIE = 'edx-jwt-refresh-cookie'
+
+# Enable JWT cookies for authentication
+JWT_AUTH_COOKIE = 'edx-jwt-cookie'
+JWT_AUTH_COOKIE_DOMAIN = ''
+JWT_AUTH_COOKIE_PATH = '/'
+JWT_AUTH_COOKIE_SAMESITE = 'Lax'
+JWT_AUTH_COOKIE_SECURE = False  # Set to True for HTTPS
+
+# Ensure JWT authentication is enabled
+JWT_AUTH_BACKEND = 'django.contrib.auth.backends.ModelBackend'
 
 # Define the SSO redirect middleware inline
 from django.conf import settings
@@ -372,13 +408,28 @@ def activate_user(backend, user, *args, **kwargs):
         user.is_active = True
         user.save()
         
+# Add the set_logged_in_cookies function
+def set_logged_in_cookies(backend, user, request, *args, **kwargs):
+    """Ensure proper session and authentication cookies are set"""
+    if user and request:
+        from django.contrib.auth import login
+        from common.djangoapps.student.models import UserProfile
+        
+        # Ensure user profile exists
+        UserProfile.objects.get_or_create(user=user)
+        
+        # Force login
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+        request.session.save()
+        
 sso_redirect_module.activate_user = activate_user
+sso_redirect_module.set_logged_in_cookies = set_logged_in_cookies
 
 # Add to sys.modules
 sys.modules['lms.djangoapps.sso_redirect'] = sso_redirect_module
 
-# INSERT MIDDLEWARE TO FORCE REDIRECTS
-MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
+# Disable middleware temporarily to ensure callbacks work
+# MIDDLEWARE = ['lms.djangoapps.sso_redirect.SSORedirectMiddleware'] + MIDDLEWARE
 
 # Disable password reset
 FEATURES['ENABLE_PASSWORD_RESET'] = False
@@ -474,15 +525,26 @@ hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # Configure SSO button and auto-redirect
 THIRD_PARTY_AUTH_ONLY_PROMPT = ""
+
+# CRITICAL: This must match the slug in Django Admin
+FEATURES['THIRD_PARTY_AUTH_BACKENDS'] = ['oidc']
+
+# Provider configuration
 THIRD_PARTY_AUTH_PROVIDERS = [{
-    'backend_name': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
+    'backend_name': 'oidc',  # Must match the slug in Django Admin
     'name': 'oidc',
+    'slug': 'oidc',
     'display_name': 'Sign in with Zitadel',
     'visible': True,
     'icon_class': 'fa-sign-in',
     'login_url': '/auth/login/oidc/',
     'skip_registration_form': True,
 }]
+
+# Map backend names
+SOCIAL_AUTH_BACKEND_MAPPING = {
+    'oidc': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
+}
 
 # Add JavaScript to auto-click SSO button
 MFE_CONFIG_OVERRIDE = {
