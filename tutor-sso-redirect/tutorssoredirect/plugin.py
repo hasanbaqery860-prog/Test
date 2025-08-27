@@ -33,11 +33,11 @@ hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
 # SSO Redirect Plugin Settings - Enable MFE with auto-redirect to SSO
 
-# DISABLE MFE - FORCE DIRECT TO ZITADEL
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
-FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = False
+# ENABLE MFE
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+ENABLE_AUTHN_MICROFRONTEND = True
+FEATURES['ENABLE_AUTHN_MICROFRONTEND'] = True
 
 # Enable both SSO and normal login
 FEATURES['DISABLE_ACCOUNT_REGISTRATION'] = False  
@@ -242,8 +242,8 @@ CSRF_TRUSTED_ORIGINS = [
     'http://91.107.146.137:1999',
 ]
 
-# FORCE LOGIN TO ZITADEL
-LOGIN_URL = '/auth/login/oidc/'
+# Login goes to MFE
+LOGIN_URL = '/login'
 LOGIN_REDIRECT_URL = '/dashboard'
 LOGOUT_REDIRECT_URL = '/'
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = '/dashboard'
@@ -399,9 +399,9 @@ SSO_REDIRECT_URL = '{{ SSO_REDIRECT_URL }}'
 # Disable enterprise login
 FEATURES['DISABLE_ENTERPRISE_LOGIN'] = True
 
-# DISABLE MFE COMPLETELY
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
+# ENABLE MFE
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
 
 # Override account MFE settings too
 ACCOUNT_MICROFRONTEND_URL = None
@@ -454,10 +454,10 @@ LOGIN_URL = '/login'
 # Production settings to ensure MFE is enabled
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-production-settings", """
-# DISABLE MFE - FORCE ZITADEL
-AUTHN_MICROFRONTEND_URL = None
-AUTHN_MICROFRONTEND_DOMAIN = None
-ENABLE_AUTHN_MICROFRONTEND = False
+# ENABLE MFE
+AUTHN_MICROFRONTEND_URL = "http://91.107.146.137:1999/authn"
+AUTHN_MICROFRONTEND_DOMAIN = "91.107.146.137:1999"
+ENABLE_AUTHN_MICROFRONTEND = True
 
 # Ensure third-party auth is enabled in production
 FEATURES['ENABLE_THIRD_PARTY_AUTH'] = True
@@ -469,11 +469,11 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 """),
 ])
 
-# Configure SSO as an option alongside normal login
+# Add auto-redirect JavaScript for MFE
 hooks.Filters.ENV_PATCHES.add_items([
     ("openedx-lms-common-settings", """
-# Configure SSO button to be visible in MFE
-THIRD_PARTY_AUTH_ONLY_PROMPT = "Or sign in with:"
+# Configure SSO button and auto-redirect
+THIRD_PARTY_AUTH_ONLY_PROMPT = ""
 THIRD_PARTY_AUTH_PROVIDERS = [{
     'backend_name': 'social_core.backends.open_id_connect.OpenIdConnectAuth',
     'name': 'oidc',
@@ -483,6 +483,13 @@ THIRD_PARTY_AUTH_PROVIDERS = [{
     'login_url': '/auth/login/oidc/',
     'skip_registration_form': True,
 }]
+
+# Add JavaScript to auto-click SSO button
+MFE_CONFIG_OVERRIDE = {
+    'AUTHN_MFE': {
+        'AUTO_REDIRECT_TO_TPA': 'oidc',
+    }
+}
 """),
 ])
 

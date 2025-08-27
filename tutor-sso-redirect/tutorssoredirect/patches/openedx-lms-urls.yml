@@ -1,25 +1,23 @@
 name: openedx-lms-urls
 content: |
-  # FORCE EVERYTHING TO ZITADEL - NO EXCEPTIONS
+  # Redirect to MFE with auto-SSO hint
   from django.urls import re_path
-  from django.http import HttpResponsePermanentRedirect
+  from django.http import HttpResponseRedirect
+  from django.conf import settings
   
-  def force_zitadel(request):
-      """GO TO ZITADEL NOW"""
-      protocol = 'https' if request.is_secure() else 'http'
-      host = request.get_host()
+  def mfe_sso_redirect(request):
+      """Redirect to MFE with SSO hint for auto-redirect"""
+      mfe_url = getattr(settings, 'AUTHN_MICROFRONTEND_URL', 'http://91.107.146.137:1999/authn')
       next_url = request.GET.get('next', '/dashboard')
-      return HttpResponsePermanentRedirect(f"{protocol}://{host}/auth/login/oidc/?next={next_url}")
+      # tpa_hint=oidc will trigger auto-redirect in MFE
+      return HttpResponseRedirect(f"{mfe_url}/login?next={next_url}&tpa_hint=oidc")
   
-  # OVERRIDE EVERYTHING
+  # Override login URLs to go to MFE with SSO hint
   auth_redirects = [
-      re_path(r'^login/?$', force_zitadel),
-      re_path(r'^register/?$', force_zitadel),
-      re_path(r'^signin/?$', force_zitadel),
-      re_path(r'^signup/?$', force_zitadel),
-      re_path(r'^auth/login/?$', force_zitadel),
-      re_path(r'^account/login/?$', force_zitadel),
-      re_path(r'^user_api/v1/account/login_session/?$', force_zitadel),
+      re_path(r'^login/?$', mfe_sso_redirect),
+      re_path(r'^register/?$', mfe_sso_redirect),
+      re_path(r'^signin/?$', mfe_sso_redirect),
+      re_path(r'^signup/?$', mfe_sso_redirect),
   ]
   
   urlpatterns = auth_redirects + urlpatterns
